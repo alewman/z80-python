@@ -9,7 +9,7 @@ description = "Readable, pure-Python Z80 instruction-core reference implementati
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-authors = [{ name = "Alex Newman" }]
+authors = [{ name = "alewman" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
