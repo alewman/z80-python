@@ -64,6 +64,26 @@ assert cpu.a == 0x2B
 retained as a supported historical name. CPU registers and modeled state are
 directly readable and writable; the host owns memory, devices, and reset policy.
 
+## Maskable interrupts
+
+The core provides a deterministic instruction-boundary model for external maskable
+interrupts. A host asserts a request with `request_maskable_interrupt()` and calls
+`step()` normally. Once `IFF1` permits it (including the real one-instruction `EI`
+delay), `step()` returns the interrupt lifecycle timing and transfers control:
+
+- IM 1 enters `0x0038` in 13 T-states, which is the standard arcade-board case;
+- IM 2 reads a two-byte target through `I` plus the supplied device vector byte in
+    19 T-states; and
+- IM 0 intentionally supports device-supplied `RST` opcodes only.
+
+Acceptance pushes the instruction-boundary PC, clears both interrupt flip-flops, and
+wakes a halted CPU. A masked request remains pending until accepted or explicitly
+removed with `clear_maskable_interrupt()`. This is a lifecycle abstraction, not a
+cycle-accurate interrupt-acknowledge bus model.
+
+See [the interrupt lifecycle contract](docs/interrupt-lifecycle.md) for exact mode,
+timing, and scope details.
+
 ## Development and validation
 
 ```text

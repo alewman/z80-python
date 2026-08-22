@@ -68,6 +68,7 @@ class ControlMixin:
         """DI/EI -- update both interrupt-enable flip-flops."""
         self.iff1 = enabled
         self.iff2 = enabled
+        self._ei_delay = 1 if enabled else 0
         self._update_q(False)
         return 4
 

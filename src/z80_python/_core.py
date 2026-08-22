@@ -32,6 +32,8 @@ class CoreMixin:
         self.q = 0
         self._io_data = 0
         self.halted = False
+        self._ei_delay = 0
+        self._pending_maskable_interrupt: int | None = None
 
     def _inc_r(self) -> None:
         self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
@@ -67,6 +69,47 @@ class CoreMixin:
         high = self.read_byte(self.sp)
         self.sp = (self.sp + 1) & 0xFFFF
         return (high << 8) | low
+
+    def _can_accept_maskable_interrupt(self) -> bool:
+        return self.iff1 and self._ei_delay == 0 and self._pending_maskable_interrupt is not None
+
+    def _accept_maskable_interrupt(self) -> int:
+        """Enter a pending maskable interrupt at an instruction boundary."""
+
+        vector_byte = self._pending_maskable_interrupt
+        if vector_byte is None:
+            raise RuntimeError("no maskable interrupt is pending")
+        if not self.iff1 or self._ei_delay:
+            raise RuntimeError("maskable interrupts cannot currently be accepted")
+        if self.im == 0 and (vector_byte & 0xC7) != 0xC7:
+            raise NotImplementedError(
+                "IM 0 currently supports only device-supplied RST opcodes "
+                f"(got 0x{vector_byte:02X})"
+            )
+
+        self._pending_maskable_interrupt = None
+        self.halted = False
+        self.iff1 = False
+        self.iff2 = False
+        self._inc_r()
+        self._push_word(self.pc)
+        if self.im == 0:
+            self.wz = vector_byte & 0x38
+            self.pc = self.wz
+            t_states = 13
+        elif self.im == 1:
+            self.wz = 0x0038
+            self.pc = self.wz
+            t_states = 13
+        else:
+            vector_address = ((self.i & 0xFF) << 8) | vector_byte
+            low = self.read_byte(vector_address)
+            high = self.read_byte((vector_address + 1) & 0xFFFF)
+            self.wz = (high << 8) | low
+            self.pc = self.wz
+            t_states = 19
+        self._update_q(False)
+        return t_states
 
     def _hl(self) -> int:
         return (self.h << 8) | self.l

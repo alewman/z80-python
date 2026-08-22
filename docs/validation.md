@@ -4,9 +4,13 @@
 
 `z80-python` is a **SingleStep-complete, ZEXDOC/ZEXALL-certified pure-Python
 Z80 instruction core**. The claim covers instruction-level semantic state and
-long execution sequences. It does not claim cycle-accurate external bus
-signaling, a complete Z80 machine, CP/M, interrupt acceptance/service,
-EI-delay behavior, HALT wakeup, device scheduling, or memory contention.
+long execution sequences. It includes a deterministic instruction-boundary model for
+maskable interrupt acceptance/service, EI delay, and HALT wakeup. It does not claim
+cycle-accurate external bus signaling, a complete Z80 machine, CP/M, NMI behavior,
+device scheduling, or memory contention.
+
+The specific lifecycle contract, mode coverage, and remaining exclusions are in
+[interrupt-lifecycle.md](interrupt-lifecycle.md).
 
 ## One-step vector corpus
 

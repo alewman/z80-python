@@ -68,13 +68,51 @@ class Z80CPU(
     """
 
     def step(self) -> int:
-        """Execute one instruction and return its documented T-state count.
+        """Advance one instruction boundary and return its documented T-state count.
 
-        T-states describe instruction timing totals, not externally observable
-        bus cycles.  ``decode_and_execute()`` remains supported as the
-        historical compatibility name.
+        A pending, accepted maskable interrupt is serviced before instruction fetch.
+        A halted CPU consumes a four-T-state idle cycle until an accepted interrupt
+        wakes it. T-states are instruction/lifecycle totals, not externally observable
+        bus cycles. ``decode_and_execute()`` remains the historical instruction-only
+        compatibility entry point.
         """
-        return self.decode_and_execute()
+        if self._can_accept_maskable_interrupt():
+            return self._accept_maskable_interrupt()
+
+        delay_was_active = self._ei_delay > 0
+        if self.halted:
+            self._inc_r()
+            self._update_q(False)
+            t_states = 4
+        else:
+            t_states = self.decode_and_execute()
+        if delay_was_active:
+            self._ei_delay -= 1
+        return t_states
+
+    @property
+    def maskable_interrupt_pending(self) -> bool:
+        """Whether a device has requested a maskable interrupt not yet accepted."""
+
+        return self._pending_maskable_interrupt is not None
+
+    def request_maskable_interrupt(self, vector_byte: int = 0xFF) -> None:
+        """Assert the maskable-interrupt request line between instruction boundaries.
+
+        The request remains pending through ``DI`` or an EI-delay window and is
+        accepted by a later :meth:`step` when ``IFF1`` permits it. ``vector_byte`` is
+        ignored by IM 1, supplies the low vector byte for IM 2, and must be an RST
+        opcode for the intentionally bounded IM 0 implementation.
+        """
+
+        if not isinstance(vector_byte, int) or not 0 <= vector_byte <= 0xFF:
+            raise ValueError("vector_byte must be an integer in range 0x00..0xFF")
+        self._pending_maskable_interrupt = vector_byte
+
+    def clear_maskable_interrupt(self) -> None:
+        """Deassert a previously requested but not-yet-accepted interrupt."""
+
+        self._pending_maskable_interrupt = None
 
     @abstractmethod
     def read_byte(self, addr: int) -> int:
