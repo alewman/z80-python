@@ -21,9 +21,13 @@ a complete Z80 machine, CP/M, interrupt lifecycle handling, or a Galaxian board.
 
 ## Install
 
+Until the first PyPI release, install directly from GitHub:
+
 ```text
-python -m pip install z80-python
+python -m pip install "git+https://github.com/alewman/z80-python.git"
 ```
+
+The planned PyPI distribution name is `z80-python`.
 
 The public import is `z80_python`, intentionally distinct from the unrelated
 existing `z80` distribution on PyPI.
