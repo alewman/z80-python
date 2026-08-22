@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "z80-python"
-version = "0.1.0"
+version = "0.1.1"
 description = "Readable, pure-Python Z80 instruction-core reference implementation"
 readme = "README.md"
 requires-python = ">=3.11"
