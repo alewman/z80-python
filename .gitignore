@@ -1,0 +1,18 @@
+# Python and package builds
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments and tooling
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# External validation inputs; fetch them locally, never commit them.
+tests/z80_test_vectors/
+tests/zex/
