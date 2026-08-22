@@ -1,8 +1,8 @@
-# Maskable Interrupt Lifecycle
+# Interrupt Lifecycle
 
-`z80-python` models maskable interrupts as deterministic state transitions at
-instruction boundaries. It deliberately does not attempt to expose individual
-interrupt-acknowledge bus cycles or memory-contention timing.
+`z80-python` models maskable interrupts and NMIs as deterministic state
+transitions at instruction boundaries. It deliberately does not attempt to expose
+individual interrupt-acknowledge bus cycles or memory-contention timing.
 
 ## Host protocol
 
@@ -18,6 +18,16 @@ interrupt-acknowledge bus cycles or memory-contention timing.
 `cpu.maskable_interrupt_pending` exposes whether the request line is still asserted.
 Hosts should schedule devices from the returned T-state totals; they must not alter
 `PC`, `SP`, flags, or interrupt flip-flops to synthesize an interrupt.
+
+## Non-maskable interrupts
+
+A device requests an NMI with `cpu.request_non_maskable_interrupt()`. The request
+is latched until the next `step()` and can be cancelled before then with
+`cpu.clear_non_maskable_interrupt()`. `cpu.non_maskable_interrupt_pending` exposes
+the latched state. At an instruction boundary an NMI takes priority over a maskable
+request, ignores `IFF1` and EI delay, wakes HALT, increments `R`, pushes the
+boundary PC, copies `IFF1` to `IFF2`, clears `IFF1`, and enters `0x0066` in 11
+T-states. Repeated requests while one is pending coalesce into one NMI.
 
 ## Acceptance behavior
 
@@ -41,6 +51,6 @@ until an accepted maskable interrupt wakes it.
 ## Scope
 
 This API covers the common interrupt lifecycle needed by single-CPU machine hosts,
-including arcade boards and home-computer emulators. It does not yet model NMI,
+including arcade boards and home-computer emulators. It does not model
 interrupt-acknowledge bus callbacks, daisy-chain priority, floating-bus values,
 cycle-accurate timing, or memory contention.

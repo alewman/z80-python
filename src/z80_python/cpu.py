@@ -70,12 +70,14 @@ class Z80CPU(
     def step(self) -> int:
         """Advance one instruction boundary and return its documented T-state count.
 
-        A pending, accepted maskable interrupt is serviced before instruction fetch.
-        A halted CPU consumes a four-T-state idle cycle until an accepted interrupt
-        wakes it. T-states are instruction/lifecycle totals, not externally observable
-        bus cycles. ``decode_and_execute()`` remains the historical instruction-only
-        compatibility entry point.
+        A pending NMI takes priority over an accepted maskable interrupt and both are
+        serviced before instruction fetch. A halted CPU consumes a four-T-state idle
+        cycle until an accepted interrupt wakes it. T-states are instruction/lifecycle
+        totals, not externally observable bus cycles. ``decode_and_execute()`` remains
+        the historical instruction-only compatibility entry point.
         """
+        if self._non_maskable_interrupt_pending:
+            return self._accept_non_maskable_interrupt()
         if self._can_accept_maskable_interrupt():
             return self._accept_maskable_interrupt()
 
@@ -113,6 +115,27 @@ class Z80CPU(
         """Deassert a previously requested but not-yet-accepted interrupt."""
 
         self._pending_maskable_interrupt = None
+
+    @property
+    def non_maskable_interrupt_pending(self) -> bool:
+        """Whether a device has requested a non-maskable interrupt not yet accepted."""
+
+        return self._non_maskable_interrupt_pending
+
+    def request_non_maskable_interrupt(self) -> None:
+        """Latch an NMI request for service at the next instruction boundary.
+
+        NMIs ignore ``IFF1`` and an EI-delay window. On acceptance they preserve the
+        old ``IFF1`` in ``IFF2``, clear ``IFF1``, push the boundary PC, and enter
+        address ``0x0066``. Repeated requests while pending coalesce into one NMI.
+        """
+
+        self._non_maskable_interrupt_pending = True
+
+    def clear_non_maskable_interrupt(self) -> None:
+        """Cancel a requested NMI that has not yet reached an instruction boundary."""
+
+        self._non_maskable_interrupt_pending = False
 
     @abstractmethod
     def read_byte(self, addr: int) -> int:

@@ -34,6 +34,7 @@ class CoreMixin:
         self.halted = False
         self._ei_delay = 0
         self._pending_maskable_interrupt: int | None = None
+        self._non_maskable_interrupt_pending = False
 
     def _inc_r(self) -> None:
         self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
@@ -72,6 +73,23 @@ class CoreMixin:
 
     def _can_accept_maskable_interrupt(self) -> bool:
         return self.iff1 and self._ei_delay == 0 and self._pending_maskable_interrupt is not None
+
+    def _accept_non_maskable_interrupt(self) -> int:
+        """Enter a pending NMI at an instruction boundary."""
+
+        if not self._non_maskable_interrupt_pending:
+            raise RuntimeError("no non-maskable interrupt is pending")
+
+        self._non_maskable_interrupt_pending = False
+        self.halted = False
+        self.iff2 = self.iff1
+        self.iff1 = False
+        self._inc_r()
+        self._push_word(self.pc)
+        self.wz = 0x0066
+        self.pc = self.wz
+        self._update_q(False)
+        return 11
 
     def _accept_maskable_interrupt(self) -> int:
         """Enter a pending maskable interrupt at an instruction boundary."""

@@ -122,3 +122,45 @@ def test_interrupt_request_validates_and_can_be_cleared() -> None:
     cpu.request_maskable_interrupt()
     cpu.clear_maskable_interrupt()
     assert cpu.maskable_interrupt_pending is False
+
+
+def test_nmi_ignores_masks_preserves_iff1_in_iff2_and_enters_0066() -> None:
+    cpu = MemoryCPU()
+    cpu.pc, cpu.sp, cpu.r, cpu.iff1, cpu.iff2 = 0x1234, 0x4000, 0x7E, True, False
+    cpu.request_non_maskable_interrupt()
+
+    assert cpu.step() == 11
+    assert (cpu.pc, cpu.sp, cpu.read_byte(0x3FFE), cpu.read_byte(0x3FFF)) == (
+        0x0066,
+        0x3FFE,
+        0x34,
+        0x12,
+    )
+    assert (cpu.iff1, cpu.iff2, cpu.non_maskable_interrupt_pending, cpu.r) == (
+        False,
+        True,
+        False,
+        0x7F,
+    )
+
+
+def test_nmi_wakes_halt_and_has_priority_over_maskable_interrupts() -> None:
+    cpu = MemoryCPU()
+    cpu.im, cpu.pc, cpu.sp, cpu.iff1, cpu.iff2 = 1, 0, 0x4000, True, True
+    cpu.memory[0] = 0x76  # HALT
+
+    assert cpu.step() == 4
+    cpu.request_maskable_interrupt()
+    cpu.request_non_maskable_interrupt()
+
+    assert cpu.step() == 11
+    assert (cpu.pc, cpu.halted, cpu.maskable_interrupt_pending) == (0x0066, False, True)
+
+
+def test_pending_nmi_can_be_cleared_before_its_instruction_boundary() -> None:
+    cpu = MemoryCPU()
+    cpu.request_non_maskable_interrupt()
+    cpu.clear_non_maskable_interrupt()
+
+    assert cpu.non_maskable_interrupt_pending is False
+    assert cpu.step() == 4

@@ -17,7 +17,7 @@ The extracted core has passed:
 
 See [validation evidence](docs/validation.md) for exact hashes, commands,
 results, and scope limits. This does **not** claim cycle-accurate bus behavior,
-a complete Z80 machine, CP/M, interrupt lifecycle handling, or a Galaxian board.
+a complete Z80 machine, CP/M, or a Galaxian board.
 
 ## Install
 
@@ -83,6 +83,15 @@ cycle-accurate interrupt-acknowledge bus model.
 
 See [the interrupt lifecycle contract](docs/interrupt-lifecycle.md) for exact mode,
 timing, and scope details.
+
+## Non-maskable interrupts
+
+Hosts request an NMI with `request_non_maskable_interrupt()`. It is accepted at the
+next instruction boundary regardless of `IFF1` or EI delay, takes priority over a
+maskable request, wakes HALT, pushes the boundary PC, copies `IFF1` to `IFF2`,
+clears `IFF1`, and enters `0x0066` in 11 T-states. A pending NMI can be inspected
+through `non_maskable_interrupt_pending` or cancelled with
+`clear_non_maskable_interrupt()`.
 
 ## Development and validation
 
