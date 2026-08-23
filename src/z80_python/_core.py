@@ -33,6 +33,7 @@ class CoreMixin:
         self._io_data = 0
         self.halted = False
         self._ei_delay = 0
+        self._reset_pending = False
         self._pending_maskable_interrupt: int | None = None
         self._non_maskable_interrupt_pending = False
 
@@ -73,6 +74,21 @@ class CoreMixin:
 
     def _can_accept_maskable_interrupt(self) -> bool:
         return self.iff1 and self._ei_delay == 0 and self._pending_maskable_interrupt is not None
+
+    def _accept_reset(self) -> int:
+        """Apply the RESET-visible CPU state while the host holds RESET asserted."""
+
+        if not self._reset_pending:
+            raise RuntimeError("RESET is not asserted")
+
+        self.pc = 0
+        self.im = 0
+        self.iff1 = False
+        self.iff2 = False
+        self.halted = False
+        self._ei_delay = 0
+        self._update_q(False)
+        return 3
 
     def _accept_non_maskable_interrupt(self) -> int:
         """Enter a pending NMI at an instruction boundary."""

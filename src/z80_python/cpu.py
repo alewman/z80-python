@@ -61,21 +61,24 @@ class Z80CPU(
 ):
     """Abstract Z80 instruction core with memory and I/O supplied by a host.
 
-    A newly constructed CPU has zeroed processor state.  The host owns memory,
-    devices, and any reset policy; construct a new instance to obtain the
-    package's defined initial state.  Host methods must mask addresses to 16
-    bits and values to 8 bits when their backing storage requires it.
+    A newly constructed CPU has zeroed processor state. The host owns memory and
+    devices, and may use :meth:`request_reset` for a board-level reset while
+    retaining those devices. Host methods must mask addresses to 16 bits and
+    values to 8 bits when their backing storage requires it.
     """
 
     def step(self) -> int:
         """Advance one instruction boundary and return its documented T-state count.
 
-        A pending NMI takes priority over an accepted maskable interrupt and both are
-        serviced before instruction fetch. A halted CPU consumes a four-T-state idle
-        cycle until an accepted interrupt wakes it. T-states are instruction/lifecycle
-        totals, not externally observable bus cycles. ``decode_and_execute()`` remains
-        the historical instruction-only compatibility entry point.
+        An asserted RESET takes priority over NMI and an accepted maskable interrupt;
+        each is serviced before instruction fetch. A halted CPU consumes a four-T-state
+        idle cycle until an accepted interrupt wakes it. T-states are
+        instruction/lifecycle totals, not externally observable bus cycles.
+        ``decode_and_execute()`` remains the historical instruction-only compatibility
+        entry point.
         """
+        if self._reset_pending:
+            return self._accept_reset()
         if self._non_maskable_interrupt_pending:
             return self._accept_non_maskable_interrupt()
         if self._can_accept_maskable_interrupt():
@@ -91,6 +94,32 @@ class Z80CPU(
         if delay_was_active:
             self._ei_delay -= 1
         return t_states
+
+    @property
+    def reset_pending(self) -> bool:
+        """Whether the host has asserted RESET.
+
+        RESET is modeled as a level-sensitive input. It remains asserted until
+        :meth:`clear_reset` is called, and each :meth:`step` while asserted services
+        the documented reset state instead of fetching an instruction.
+        """
+
+        return self._reset_pending
+
+    def request_reset(self) -> None:
+        """Assert RESET for servicing at the next instruction boundary.
+
+        RESET has priority over NMI and maskable-interrupt requests. The host must
+        call :meth:`clear_reset` to release the reset line before instruction
+        execution resumes.
+        """
+
+        self._reset_pending = True
+
+    def clear_reset(self) -> None:
+        """Release the host-controlled RESET line."""
+
+        self._reset_pending = False
 
     @property
     def maskable_interrupt_pending(self) -> bool:

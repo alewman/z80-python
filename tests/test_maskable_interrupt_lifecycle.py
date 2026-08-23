@@ -25,6 +25,49 @@ class MemoryCPU(Z80CPU):
         pass
 
 
+def test_reset_has_priority_reinitializes_interrupt_execution_state_and_stays_asserted() -> None:
+    cpu = MemoryCPU()
+    cpu.pc, cpu.sp, cpu.im, cpu.iff1, cpu.iff2, cpu.halted = 0x1234, 0x4000, 2, True, True, True
+    cpu.request_non_maskable_interrupt()
+    cpu.request_maskable_interrupt()
+    cpu.request_reset()
+
+    assert cpu.step() == 3
+    assert (cpu.pc, cpu.sp, cpu.im, cpu.iff1, cpu.iff2, cpu.halted) == (
+        0,
+        0x4000,
+        0,
+        False,
+        False,
+        False,
+    )
+    pending_requests = (
+        cpu.reset_pending,
+        cpu.non_maskable_interrupt_pending,
+        cpu.maskable_interrupt_pending,
+    )
+    assert pending_requests == (
+        True,
+        True,
+        True,
+    )
+    assert cpu.step() == 3
+
+
+def test_releasing_reset_resumes_instruction_execution_from_zero() -> None:
+    cpu = MemoryCPU()
+    cpu.pc = 0x1234
+    cpu.memory[0] = 0x00  # NOP
+    cpu.request_reset()
+
+    assert cpu.step() == 3
+    cpu.clear_reset()
+
+    assert cpu.reset_pending is False
+    assert cpu.step() == 4
+    assert cpu.pc == 1
+
+
 def test_im1_interrupt_pushes_instruction_boundary_and_clears_flip_flops() -> None:
     cpu = MemoryCPU()
     cpu.im, cpu.iff1, cpu.iff2, cpu.pc, cpu.sp, cpu.r = 1, True, True, 0x1234, 0x4000, 0x7E

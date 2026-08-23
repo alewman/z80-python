@@ -19,6 +19,20 @@ individual interrupt-acknowledge bus cycles or memory-contention timing.
 Hosts should schedule devices from the returned T-state totals; they must not alter
 `PC`, `SP`, flags, or interrupt flip-flops to synthesize an interrupt.
 
+## RESET
+
+A host asserts RESET with `cpu.request_reset()` and releases it with
+`cpu.clear_reset()`. `cpu.reset_pending` exposes the line level. RESET is modeled
+as level-sensitive: every `step()` while it remains asserted returns 3 T-states
+without fetching an instruction or accessing the stack. It takes priority over
+NMI and maskable-interrupt requests, sets `PC` to `0x0000`, selects IM 0, clears
+`IFF1` and `IFF2`, exits HALT, and cancels a pending EI delay.
+
+This instruction core deliberately defines only those processor-state effects.
+It preserves general registers, `SP`, `I`, `R`, `WZ`, and device request state;
+the host owns device resets and decides when to release RESET. This models the
+useful board-level lifecycle without claiming cycle-accurate reset-pin timing.
+
 ## Non-maskable interrupts
 
 A device requests an NMI with `cpu.request_non_maskable_interrupt()`. The request
