@@ -6,7 +6,7 @@ from dataclasses import dataclass, fields
 from itertools import zip_longest
 from typing import TextIO
 
-from z80_python.debug import StepRecord
+from z80_python.debug import DebugSession, StepRecord
 from z80_python.disasm import Instruction
 from z80_python.state import CPUState
 
@@ -113,6 +113,31 @@ def first_trace_divergence(
     """Return the first unequal aligned position, or ``None`` for equal traces."""
 
     return next(iter_trace_divergences(left, right), None)
+
+
+def iter_session_steps(session: DebugSession, *, max_steps: int) -> Iterator[StepRecord]:
+    """Yield a finite number of live session boundaries without buffering them."""
+
+    if not isinstance(session, DebugSession):
+        raise TypeError("session must be a DebugSession")
+    if type(max_steps) is not int or max_steps <= 0:
+        raise ValueError("max_steps must be a positive integer")
+    for _ in range(max_steps):
+        yield session.step()
+
+
+def first_session_divergence(
+    left: DebugSession,
+    right: DebugSession,
+    *,
+    max_steps: int,
+) -> TraceDivergence | None:
+    """Advance two sessions in lockstep until they differ or the finite budget ends."""
+
+    return first_trace_divergence(
+        iter_session_steps(left, max_steps=max_steps),
+        iter_session_steps(right, max_steps=max_steps),
+    )
 
 
 def step_record_to_dict(record: StepRecord) -> dict[str, object]:
@@ -310,7 +335,9 @@ __all__ = [
     "TraceDivergence",
     "TraceValue",
     "compare_step_records",
+    "first_session_divergence",
     "first_trace_divergence",
+    "iter_session_steps",
     "iter_trace_divergences",
     "read_trace",
     "step_record_from_dict",

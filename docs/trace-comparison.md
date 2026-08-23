@@ -11,6 +11,32 @@ if divergence is not None:
         print(difference.path, difference.left, difference.right)
 ```
 
+    For live targets, `first_session_divergence()` advances two `DebugSession` values
+    in lockstep under a mandatory finite budget and stops immediately when their
+    processor observations differ:
+
+    ```python
+    divergence = first_session_divergence(first, second, max_steps=1_000_000)
+    ```
+
+    Each session retains its own bounded history, which supplies the instructions
+    immediately preceding the divergence without requiring the comparator to buffer
+    the full run.
+
+    ### Galemu integration proof
+
+    The first live-machine witness used two otherwise identical synthetic Galaxian
+    boards executing `JR -2`. Both boards enabled the deterministic vblank scheduler;
+    only the left board's NMI-enable latch was set. Lockstep comparison stopped at
+    position 3,583, after 3,584 boundaries on each side. The exact first difference
+    was `after.non_maskable_interrupt_pending`: the left scheduler had requested its
+    vblank NMI and emitted `vblank_nmi_request`, while the right scheduler had not.
+
+    This is the intended diagnostic shape. It identified the scheduling boundary that
+    caused the future control-flow divergence, one step earlier than merely observing
+    one CPU enter `0x0066`. The retained eight-record context consisted of the shared
+    loop instructions immediately preceding that request.
+
 Comparison covers:
 
 - boundary kind;

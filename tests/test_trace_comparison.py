@@ -13,7 +13,9 @@ from z80_python import (
     StepRecord,
     TraceDifference,
     compare_step_records,
+    first_session_divergence,
     first_trace_divergence,
+    iter_session_steps,
     iter_trace_divergences,
     read_trace,
     step_record_from_dict,
@@ -124,6 +126,33 @@ def test_first_divergence_stops_consuming_after_the_unequal_pair() -> None:
 
     assert first_trace_divergence(records, right_trace()) is not None
     assert consumed == [0]
+
+
+def test_live_sessions_stop_at_first_divergence_and_retain_prior_context() -> None:
+    left_cpu = MinimalZ80Host()
+    right_cpu = MinimalZ80Host()
+    left_cpu.memory[:3] = bytes((0x00, 0x3C, 0x00))
+    right_cpu.memory[:3] = bytes((0x00, 0x3D, 0x00))
+    left = DebugSession(left_cpu, peek_byte=left_cpu.memory.__getitem__, history_limit=4)
+    right = DebugSession(right_cpu, peek_byte=right_cpu.memory.__getitem__, history_limit=4)
+
+    divergence = first_session_divergence(left, right, max_steps=3)
+
+    assert divergence is not None
+    assert divergence.position == 1
+    assert "instruction.data" in {item.path for item in divergence.differences}
+    assert "after.a" in {item.path for item in divergence.differences}
+    assert (left.total_steps, right.total_steps) == (2, 2)
+    assert left.history[0] == right.history[0]
+
+
+def test_live_session_iteration_requires_a_finite_positive_budget() -> None:
+    cpu = MinimalZ80Host()
+    session = DebugSession(cpu)
+
+    assert len(tuple(iter_session_steps(session, max_steps=2))) == 2
+    with pytest.raises(ValueError, match="max_steps"):
+        tuple(iter_session_steps(session, max_steps=0))
 
 
 def test_trace_values_and_records_are_validated() -> None:
