@@ -23,6 +23,14 @@ from z80_python.debug import (
     StopReason,
 )
 from z80_python.disasm import ByteReader, Instruction, disassemble, disassemble_bytes
+from z80_python.trace import (
+    TraceDifference,
+    TraceDivergence,
+    TraceValue,
+    compare_step_records,
+    first_trace_divergence,
+    iter_trace_divergences,
+)
 
 __all__ = [
     "FLAG_C",
@@ -47,6 +55,12 @@ __all__ = [
     "RunResult",
     "StepRecord",
     "StopReason",
+    "TraceDifference",
+    "TraceDivergence",
+    "TraceValue",
+    "compare_step_records",
     "disassemble",
     "disassemble_bytes",
+    "first_trace_divergence",
+    "iter_trace_divergences",
 ]

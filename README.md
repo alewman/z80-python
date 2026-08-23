@@ -102,6 +102,10 @@ registers, stepping, bounded runs, breakpoints, disassembly, memory display, and
 history over text streams. Applications construct their own machine and session,
 then embed the command loop; the package does not guess how to create a host.
 
+`first_trace_divergence()` incrementally compares two streams of structured step
+records and reports the first differing instruction, boundary, T-state count, or
+CPU-state field. See [the trace comparison contract](docs/trace-comparison.md).
+
 ## RESET
 
 Hosts assert the level-sensitive RESET input with `request_reset()` and release it
@@ -157,6 +161,8 @@ bundled in releases. Fetch the pinned vector corpus with
 ## Project records
 
 - [0.2.0 release notes](docs/releases/0.2.0.md)
+- [Public API stability](docs/api-stability.md)
+- [Trace comparison](docs/trace-comparison.md)
 - [Validation evidence and scope](docs/validation.md)
 - [Debugging and agent-tooling roadmap](docs/debugging-roadmap.md)
 - [Undocumented behavior notes](docs/undocumented-behavior.md)
