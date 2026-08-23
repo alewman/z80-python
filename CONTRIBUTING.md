@@ -10,6 +10,8 @@ For a pull request:
 4. If the change affects instruction semantics, fetch the pinned vector corpus
    and run the complete vector gate. Release candidates and semantic-core changes
    must also rerun ZEXDOC and ZEXALL as documented in [docs/validation.md](docs/validation.md).
+5. Public API and lifecycle changes require built-wheel consumer tests. Keep CPU
+   state, disassembly, debugging, and host/device boundaries explicit in those tests.
 
 Do not commit vector payloads, ZEX binaries, ROMs, caches, generated package
 artifacts, or credentials.

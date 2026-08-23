@@ -102,6 +102,15 @@ registers, stepping, bounded runs, breakpoints, disassembly, memory display, and
 history over text streams. Applications construct their own machine and session,
 then embed the command loop; the package does not guess how to create a host.
 
+## RESET
+
+Hosts assert the level-sensitive RESET input with `request_reset()` and release it
+with `clear_reset()`. Every `step()` while asserted applies the documented
+processor-state effects in 3 T-states without instruction fetch or stack access.
+RESET takes priority over NMI and maskable requests. See
+[the interrupt lifecycle contract](docs/interrupt-lifecycle.md) for preserved state
+and scope limits.
+
 ## Maskable interrupts
 
 The core provides a deterministic instruction-boundary model for external maskable
@@ -147,6 +156,7 @@ bundled in releases. Fetch the pinned vector corpus with
 
 ## Project records
 
+- [0.2.0 release notes](docs/releases/0.2.0.md)
 - [Validation evidence and scope](docs/validation.md)
 - [Debugging and agent-tooling roadmap](docs/debugging-roadmap.md)
 - [Undocumented behavior notes](docs/undocumented-behavior.md)
