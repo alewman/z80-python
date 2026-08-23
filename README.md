@@ -110,6 +110,7 @@ bundled in releases. Fetch the pinned vector corpus with
 ## Project records
 
 - [Validation evidence and scope](docs/validation.md)
+- [Debugging and agent-tooling roadmap](docs/debugging-roadmap.md)
 - [Undocumented behavior notes](docs/undocumented-behavior.md)
 - [AI-assisted development and validation](docs/ai-assisted-development.md)
 - [Extraction provenance](docs/provenance.md)
