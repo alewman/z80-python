@@ -39,6 +39,6 @@ format.
 - Hardware-fidelity claims remain bounded by the validation and lifecycle scope;
   API stability does not expand those claims.
 
-Development snapshots use a `.dev0` version and are not release promises. The
-repository moved to `0.3.0.dev0` after the GitHub-only 0.2.0 milestone; PyPI remains
-on 0.1.3 until the next complete release boundary is chosen.
+Development snapshots use a `.dev0` version and are not release promises. Version
+0.3.0 is the first PyPI release containing the complete lifecycle, state,
+disassembly, debugging, and trace-comparison contracts described here.

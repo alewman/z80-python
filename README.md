@@ -55,25 +55,21 @@ See [AI-assisted development and validation](docs/ai-assisted-development.md).
 
 ## Version status
 
-The source tree currently identifies as **`0.3.0.dev0`**. Development snapshots
-are not release promises.
+The current release is **`0.3.0`**.
 
 | Source | Status | Contents |
 | --- | --- | --- |
-| PyPI `0.1.3` | Published | Validated core with maskable interrupt and NMI lifecycle |
+| PyPI `0.3.0` | Published release | Complete validated core and inspection toolkit |
 | GitHub `v0.2.0` | Published milestone | RESET, CPU state, disassembly, and debugger foundations |
-| Current source tree `0.3.0.dev0` | Development | API hardening and advanced trace diagnostics |
+| GitHub `v0.3.0` | Current release | API hardening and advanced trace diagnostics |
 
-This distinction matters: a plain PyPI installation currently installs `0.1.3`,
-not every API documented for the development tree.
-
-### Install the published PyPI core
+### Install from PyPI
 
 ```text
 python -m pip install z80-python
 ```
 
-### Install the current source tree
+### Install the source tree
 
 ```text
 git clone https://github.com/alewman/z80-python.git
@@ -254,6 +250,7 @@ reproduction instructions and finite execution budgets are documented in
 
 ## Project records
 
+- [0.3.0 release notes](docs/releases/0.3.0.md)
 - [Validation evidence and scope](docs/validation.md)
 - [Public API stability](docs/api-stability.md)
 - [AI-assisted development and validation](docs/ai-assisted-development.md)
