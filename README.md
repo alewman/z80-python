@@ -75,6 +75,18 @@ CPU state is deliberately not a machine save state. Host RAM, ports, devices,
 scheduling, and counters must be captured and restored by the host. See
 [the CPU state contract](docs/cpu-state.md) for the exact boundary.
 
+## Disassembly
+
+`disassemble()` decodes one instruction through a caller-supplied, side-effect-free
+byte reader. `disassemble_bytes()` provides the convenient equivalent for an
+instruction already copied into a byte sequence. Both return an immutable
+`Instruction` containing its address, exact bytes, mnemonic, operands, size,
+wrapped next address, and canonical text.
+
+The CPU does not automatically call a host's `read_byte()` method for debugging:
+mapped reads can acknowledge or mutate devices. A machine should expose a separate
+peek operation when live disassembly is safe. See [the disassembly contract](docs/disassembly.md).
+
 ## Maskable interrupts
 
 The core provides a deterministic instruction-boundary model for external maskable

@@ -13,6 +13,7 @@ from z80_python.cpu import (
     CPUState,
     Flags,
 )
+from z80_python.disasm import ByteReader, Instruction, disassemble, disassemble_bytes
 
 __all__ = [
     "FLAG_C",
@@ -24,6 +25,10 @@ __all__ = [
     "FLAG_Y",
     "FLAG_Z",
     "Z80CPU",
+    "ByteReader",
     "CPUState",
     "Flags",
+    "Instruction",
+    "disassemble",
+    "disassemble_bytes",
 ]
