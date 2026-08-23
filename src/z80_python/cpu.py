@@ -27,6 +27,7 @@ from z80_python._index_dispatch import IndexDispatchMixin
 from z80_python._io import IOMixin
 from z80_python._loads import LoadMixin
 from z80_python._rotate import RotateBitMixin
+from z80_python.state import CPUState
 
 # Preserve the historical public identity even though the implementation lives
 # in a private module.
@@ -42,6 +43,7 @@ __all__ = [
     "FLAG_Y",
     "FLAG_Z",
     "Z80CPU",
+    "CPUState",
     "Flags",
 ]
 
@@ -94,6 +96,83 @@ class Z80CPU(
         if delay_was_active:
             self._ei_delay -= 1
         return t_states
+
+    def capture_state(self) -> CPUState:
+        """Return an immutable snapshot of all CPU-owned execution state.
+
+        Host memory, ports, devices, scheduling, and counters are not included.
+        This method performs no host reads and has no side effects.
+        """
+
+        return CPUState(
+            a=self.a,
+            f=self.f.byte,
+            b=self.b,
+            c=self.c,
+            d=self.d,
+            e=self.e,
+            h=self.h,
+            l=self.l,
+            ix=self.ix,
+            iy=self.iy,
+            sp=self.sp,
+            pc=self.pc,
+            wz=self.wz,
+            i=self.i,
+            r=self.r,
+            iff1=self.iff1,
+            iff2=self.iff2,
+            im=self.im,
+            af_alt=self.af_,
+            bc_alt=self.bc_,
+            de_alt=self.de_,
+            hl_alt=self.hl_,
+            q=self.q,
+            halted=self.halted,
+            ei_delay=self._ei_delay,
+            reset_pending=self._reset_pending,
+            maskable_interrupt_vector=self._pending_maskable_interrupt,
+            non_maskable_interrupt_pending=self._non_maskable_interrupt_pending,
+        )
+
+    def restore_state(self, state: CPUState) -> None:
+        """Restore a previously captured CPU state without touching the host.
+
+        ``state`` must be a validated :class:`CPUState`. Restoring CPU state alone
+        does not restore memory, ports, devices, scheduling, or host counters.
+        """
+
+        if type(state) is not CPUState:
+            raise TypeError("state must be a CPUState")
+
+        self.a = state.a
+        self.f.byte = state.f
+        self.b = state.b
+        self.c = state.c
+        self.d = state.d
+        self.e = state.e
+        self.h = state.h
+        self.l = state.l
+        self.ix = state.ix
+        self.iy = state.iy
+        self.sp = state.sp
+        self.pc = state.pc
+        self.wz = state.wz
+        self.i = state.i
+        self.r = state.r
+        self.iff1 = state.iff1
+        self.iff2 = state.iff2
+        self.im = state.im
+        self.af_ = state.af_alt
+        self.bc_ = state.bc_alt
+        self.de_ = state.de_alt
+        self.hl_ = state.hl_alt
+        self.q = state.q
+        self.halted = state.halted
+        self._ei_delay = state.ei_delay
+        self._reset_pending = state.reset_pending
+        self._pending_maskable_interrupt = state.maskable_interrupt_vector
+        self._non_maskable_interrupt_pending = state.non_maskable_interrupt_pending
 
     @property
     def reset_pending(self) -> bool:

@@ -10,6 +10,7 @@ from z80_python.cpu import (
     FLAG_Y,
     FLAG_Z,
     Z80CPU,
+    CPUState,
     Flags,
 )
 
@@ -23,5 +24,6 @@ __all__ = [
     "FLAG_Y",
     "FLAG_Z",
     "Z80CPU",
+    "CPUState",
     "Flags",
 ]

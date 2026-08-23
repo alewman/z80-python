@@ -64,6 +64,17 @@ assert cpu.a == 0x2B
 retained as a supported historical name. CPU registers and modeled state are
 directly readable and writable; the host owns memory, devices, and reset policy.
 
+## CPU state
+
+`capture_state()` returns an immutable `CPUState` containing all CPU-owned state
+needed for deterministic continuation at an instruction boundary. Passing that
+value to `restore_state()` restores registers, undocumented execution state, EI
+delay, HALT, and pending lifecycle requests without reading or changing the host.
+
+CPU state is deliberately not a machine save state. Host RAM, ports, devices,
+scheduling, and counters must be captured and restored by the host. See
+[the CPU state contract](docs/cpu-state.md) for the exact boundary.
+
 ## Maskable interrupts
 
 The core provides a deterministic instruction-boundary model for external maskable
