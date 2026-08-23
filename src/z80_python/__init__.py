@@ -1,5 +1,6 @@
 """Readable, pure-Python Z80 instruction-core reference implementation."""
 
+from z80_python.console import CommandDebugger, CommandError, CommandResult
 from z80_python.cpu import (
     FLAG_C,
     FLAG_H,
@@ -36,6 +37,9 @@ __all__ = [
     "BoundaryKind",
     "ByteReader",
     "CPUState",
+    "CommandDebugger",
+    "CommandError",
+    "CommandResult",
     "DebugSession",
     "DebugTarget",
     "Flags",

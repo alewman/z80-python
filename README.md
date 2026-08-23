@@ -97,6 +97,11 @@ Pass a side-effect-free peek function to include structured disassembly in each
 instruction record. Runs always require a finite step budget and return an explicit
 `StopReason`. See [the debug-session contract](docs/debug-session.md).
 
+`CommandDebugger` is the portable, dependency-free human frontend. It provides
+registers, stepping, bounded runs, breakpoints, disassembly, memory display, and
+history over text streams. Applications construct their own machine and session,
+then embed the command loop; the package does not guess how to create a host.
+
 ## Maskable interrupts
 
 The core provides a deterministic instruction-boundary model for external maskable

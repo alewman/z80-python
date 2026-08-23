@@ -53,3 +53,16 @@ instruction records omit disassembly.
 Memory and port watchpoints require accurate access events from the host. They are
 intentionally deferred until a real machine adapter proves that capability rather
 than being simulated through unsafe reads.
+
+## Portable command frontend
+
+`CommandDebugger` is a thin human interface over the session. `execute()` accepts
+one command and returns immutable printable lines, making it easy to embed in an
+application or test. `interact(input_stream, output_stream)` supplies a portable
+line-oriented loop without terminal-framework dependencies.
+
+The frontend includes register display, stepping, bounded runs, execute-breakpoint
+management, disassembly, memory display, and retained history. Display commands
+have explicit output bounds. Execution and breakpoint semantics remain owned by
+`DebugSession`; the frontend does not maintain a competing debugger model and has
+no terminal-framework runtime dependency.
