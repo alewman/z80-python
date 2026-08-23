@@ -31,3 +31,34 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade build
       - run: python -m build --wheel --sdist
+        - run: python -m pip install --force-reinstall dist/*.whl
+        - name: Smoke-test installed public API
+        working-directory: ${{ runner.temp }}
+        run: |
+          python - <<'PY'
+          from z80_python import CPUState, DebugSession, Z80CPU, disassemble_bytes
+
+          class Host(Z80CPU):
+            def __init__(self):
+              super().__init__()
+              self.memory = bytearray(0x10000)
+
+            def read_byte(self, addr):
+              return self.memory[addr & 0xFFFF]
+
+            def write_byte(self, addr, value):
+              self.memory[addr & 0xFFFF] = value & 0xFF
+
+            def read_port(self, addr):
+              return 0
+
+            def write_port(self, addr, value):
+              pass
+
+          cpu = Host()
+          cpu.memory[:2] = bytes((0x3E, 0x2A))
+          assert cpu.capture_state() == CPUState()
+          assert disassemble_bytes(cpu.memory[:2]).text == "LD A, 0x2A"
+          record = DebugSession(cpu, peek_byte=cpu.memory.__getitem__).step()
+          assert (record.after.a, record.t_states) == (0x2A, 7)
+          PY

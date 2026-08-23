@@ -4,12 +4,13 @@ from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from z80_python.disasm import ByteReader, Instruction, disassemble
 from z80_python.state import CPUState
 
 
+@runtime_checkable
 class DebugTarget(Protocol):
     """Minimum processor interface consumed by :class:`DebugSession`."""
 
@@ -50,6 +51,20 @@ class StepRecord:
     t_states: int
     instruction: Instruction | None
 
+    def __post_init__(self) -> None:
+        if type(self.sequence) is not int or self.sequence < 0:
+            raise ValueError("sequence must be a non-negative integer")
+        if type(self.kind) is not BoundaryKind:
+            raise ValueError("kind must be a BoundaryKind")
+        if type(self.before) is not CPUState or type(self.after) is not CPUState:
+            raise ValueError("before and after must be CPUState values")
+        if type(self.t_states) is not int or self.t_states <= 0:
+            raise ValueError("t_states must be a positive integer")
+        if self.instruction is not None and type(self.instruction) is not Instruction:
+            raise ValueError("instruction must be an Instruction or None")
+        if self.kind is not BoundaryKind.INSTRUCTION and self.instruction is not None:
+            raise ValueError("lifecycle boundaries cannot contain an instruction")
+
 
 @dataclass(frozen=True, slots=True)
 class RunResult:
@@ -61,6 +76,20 @@ class RunResult:
     t_states: int
     state: CPUState
     last_record: StepRecord | None
+
+    def __post_init__(self) -> None:
+        if type(self.reason) is not StopReason:
+            raise ValueError("reason must be a StopReason")
+        for name in ("steps", "instructions", "t_states"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if self.instructions > self.steps:
+            raise ValueError("instructions cannot exceed steps")
+        if type(self.state) is not CPUState:
+            raise ValueError("state must be a CPUState")
+        if self.last_record is not None and type(self.last_record) is not StepRecord:
+            raise ValueError("last_record must be a StepRecord or None")
 
 
 def _boundary_kind(state: CPUState) -> BoundaryKind:
@@ -95,9 +124,7 @@ class DebugSession:
         peek_byte: ByteReader | None = None,
         history_limit: int = 256,
     ) -> None:
-        if not callable(getattr(target, "step", None)) or not callable(
-            getattr(target, "capture_state", None)
-        ):
+        if not isinstance(target, DebugTarget):
             raise TypeError("target must provide step() and capture_state()")
         if peek_byte is not None and not callable(peek_byte):
             raise TypeError("peek_byte must be callable or None")

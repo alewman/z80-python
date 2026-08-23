@@ -5,7 +5,7 @@ from io import StringIO
 import pytest
 
 from examples.minimal_z80_host import MinimalZ80Host
-from z80_python import CommandDebugger, CommandError, DebugSession
+from z80_python import CommandDebugger, CommandError, CommandResult, DebugSession
 
 
 def _debugger(program: bytes = bytes((0x00, 0x00, 0x00))) -> tuple[MinimalZ80Host, CommandDebugger]:
@@ -80,3 +80,10 @@ def test_interactive_loop_reports_errors_and_exits_portably() -> None:
     rendered = output.getvalue()
     assert rendered.startswith("> error: unknown command: bad\n> #0 0000")
     assert rendered.endswith("\n> ")
+
+
+def test_command_result_rejects_invalid_public_values() -> None:
+    with pytest.raises(ValueError, match="tuple of strings"):
+        CommandResult(["line"])  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="bool"):
+        CommandResult(quit=1)  # type: ignore[arg-type]

@@ -1,9 +1,11 @@
 """Dependency-free debug-session control and evidence contracts."""
 
+from dataclasses import replace
+
 import pytest
 
 from examples.minimal_z80_host import MinimalZ80Host
-from z80_python import BoundaryKind, DebugSession, StopReason
+from z80_python import BoundaryKind, DebugSession, DebugTarget, RunResult, StopReason
 
 
 def _session(program: bytes, *, history_limit: int = 256) -> tuple[MinimalZ80Host, DebugSession]:
@@ -129,6 +131,29 @@ def test_session_without_peek_retains_execution_control() -> None:
 
     assert record.instruction is None
     assert record.after.pc == 1
+
+
+def test_debug_target_is_a_runtime_checkable_structural_protocol() -> None:
+    cpu = MinimalZ80Host()
+
+    assert isinstance(cpu, DebugTarget)
+    assert not isinstance(object(), DebugTarget)
+
+
+def test_public_debug_values_reject_invalid_construction() -> None:
+    _cpu, session = _session(bytes((0x00,)))
+    record = session.step()
+
+    with pytest.raises(ValueError, match="sequence"):
+        replace(record, sequence=-1)
+    with pytest.raises(ValueError, match="lifecycle"):
+        replace(record, kind=BoundaryKind.RESET)
+    with pytest.raises(ValueError, match="t_states"):
+        replace(record, t_states=0)
+    with pytest.raises(ValueError, match="instructions cannot exceed"):
+        RunResult(StopReason.STEP_LIMIT, 0, 1, 0, record.after, None)
+    with pytest.raises(ValueError, match="last_record"):
+        RunResult(StopReason.STEP_LIMIT, 1, 1, 4, record.after, object())  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

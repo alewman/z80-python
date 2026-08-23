@@ -20,6 +20,12 @@ class CommandResult:
     lines: tuple[str, ...] = ()
     quit: bool = False
 
+    def __post_init__(self) -> None:
+        if type(self.lines) is not tuple or not all(type(line) is str for line in self.lines):
+            raise ValueError("lines must be a tuple of strings")
+        if type(self.quit) is not bool:
+            raise ValueError("quit must be a bool")
+
 
 _HELP = (
     "help                         Show this command summary",

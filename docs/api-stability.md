@@ -18,6 +18,10 @@ The package ships a `py.typed` marker so these annotations are available to stat
 type checkers. Public dataclass field names, enum values, function signatures, and
 documented behavior follow semantic-versioning compatibility rules.
 
+Public immutable values validate their field types and ranges when constructed.
+`DebugTarget` is a runtime-checkable structural protocol, so machine hosts need not
+inherit a debugger-specific base class.
+
 ## Not public
 
 Underscore-prefixed modules, methods, attributes, and helpers are implementation
