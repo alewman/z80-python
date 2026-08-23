@@ -56,6 +56,12 @@ Both programs reported `Tests complete` with no `ERROR ****` report. The
 post-refactor CPython combined run passed in 11,028.71 seconds; the PyPy run
 passed in 677.50 seconds.
 
+The 0.2.0 release candidate was recertified under PyPy 7.3.20 / Python 3.11.13
+after the RESET, state, disassembly, and debugger additions. ZEXDOC passed in
+470.43 seconds and ZEXALL passed in 426.77 seconds; the combined integration run
+completed with 2 passed in 897.33 seconds. The debugger layers do not alter the
+instruction execution path when unused.
+
 To reproduce, download `zexdoc.com` and `zexall.com` from
 https://github.com/agn453/ZEXALL into an external directory, verify the hashes,
 then run:
