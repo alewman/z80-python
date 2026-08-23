@@ -24,12 +24,17 @@ from z80_python.debug import (
 )
 from z80_python.disasm import ByteReader, Instruction, disassemble, disassemble_bytes
 from z80_python.trace import (
+    TRACE_SCHEMA_VERSION,
     TraceDifference,
     TraceDivergence,
     TraceValue,
     compare_step_records,
     first_trace_divergence,
     iter_trace_divergences,
+    read_trace,
+    step_record_from_dict,
+    step_record_to_dict,
+    write_trace,
 )
 
 __all__ = [
@@ -41,6 +46,7 @@ __all__ = [
     "FLAG_X",
     "FLAG_Y",
     "FLAG_Z",
+    "TRACE_SCHEMA_VERSION",
     "Z80CPU",
     "BoundaryKind",
     "ByteReader",
@@ -63,4 +69,8 @@ __all__ = [
     "disassemble_bytes",
     "first_trace_divergence",
     "iter_trace_divergences",
+    "read_trace",
+    "step_record_from_dict",
+    "step_record_to_dict",
+    "write_trace",
 ]

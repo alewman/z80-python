@@ -41,3 +41,19 @@ Inputs are consumed incrementally. `first_trace_divergence()` stops reading as s
 as it finds an unequal position. `iter_trace_divergences()` retains no prior records
 beyond the current aligned pair, so it can operate on generators and large stored
 traces.
+
+## Persisted traces
+
+`write_trace(records, stream)` writes deterministic, versioned JSON Lines without
+buffering the iterable. `read_trace(stream)` validates and yields one record at a
+time, so two large files can be compared directly:
+
+```python
+with open("first.jsonl") as first, open("second.jsonl") as second:
+    divergence = first_trace_divergence(read_trace(first), read_trace(second))
+```
+
+The schema stores `TRACE_SCHEMA_VERSION`, exact instruction bytes, enum string
+values, and every CPU state field. It contains no timestamps or terminal output.
+Readers reject unknown, missing, or invalid fields rather than silently changing
+the meaning of evidence. A schema change requires a new version.

@@ -1,11 +1,13 @@
 """Incremental processor-trace comparison and first-divergence diagnosis."""
 
 from dataclasses import fields, replace
+from io import StringIO
 
 import pytest
 
 from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import (
+    TRACE_SCHEMA_VERSION,
     BoundaryKind,
     DebugSession,
     StepRecord,
@@ -13,6 +15,10 @@ from z80_python import (
     compare_step_records,
     first_trace_divergence,
     iter_trace_divergences,
+    read_trace,
+    step_record_from_dict,
+    step_record_to_dict,
+    write_trace,
 )
 
 
@@ -129,3 +135,58 @@ def test_trace_values_and_records_are_validated() -> None:
         compare_step_records(record, object())  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="traces"):
         tuple(iter_trace_divergences((record,), (object(),)))  # type: ignore[arg-type]
+
+
+def test_json_lines_round_trip_is_deterministic_and_comparable() -> None:
+    records = _history(bytes((0x3E, 0x2A, 0x00)))
+    first = StringIO()
+    second = StringIO()
+
+    assert write_trace(iter(records), first) == 2
+    assert write_trace(iter(records), second) == 2
+    assert first.getvalue() == second.getvalue()
+    assert f'"version":{TRACE_SCHEMA_VERSION}' in first.getvalue()
+
+    first.seek(0)
+    restored = tuple(read_trace(first))
+    assert restored == records
+    assert first_trace_divergence(restored, records) is None
+
+
+def test_record_dictionary_round_trip_preserves_lifecycle_and_instruction_forms() -> None:
+    instruction = _history(bytes((0x3E, 0x2A, 0x00)))[0]
+    lifecycle = replace(instruction, kind=BoundaryKind.RESET, instruction=None, t_states=3)
+
+    assert step_record_from_dict(step_record_to_dict(instruction)) == instruction
+    assert step_record_from_dict(step_record_to_dict(lifecycle)) == lifecycle
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda value: value.pop("version"),
+        lambda value: value.__setitem__("version", 999),
+        lambda value: value.__setitem__("unknown", 1),
+        lambda value: value["before"].pop("pc"),
+        lambda value: value["instruction"].__setitem__("data", "not hex"),
+    ),
+)
+def test_persisted_trace_schema_rejects_missing_unknown_and_invalid_fields(mutate) -> None:
+    value = step_record_to_dict(_history(bytes((0x00, 0x00)))[0])
+    mutate(value)
+
+    with pytest.raises(ValueError):
+        step_record_from_dict(value)
+
+
+def test_read_trace_reports_the_malformed_line_number_lazily() -> None:
+    record = _history(bytes((0x00, 0x00)))[0]
+    stream = StringIO()
+    write_trace((record,), stream)
+    stream.write("{bad json}\n")
+    stream.seek(0)
+    records = read_trace(stream)
+
+    assert next(records) == record
+    with pytest.raises(ValueError, match="line 2"):
+        next(records)
