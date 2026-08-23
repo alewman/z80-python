@@ -13,6 +13,14 @@ from z80_python.cpu import (
     CPUState,
     Flags,
 )
+from z80_python.debug import (
+    BoundaryKind,
+    DebugSession,
+    DebugTarget,
+    RunResult,
+    StepRecord,
+    StopReason,
+)
 from z80_python.disasm import ByteReader, Instruction, disassemble, disassemble_bytes
 
 __all__ = [
@@ -25,10 +33,16 @@ __all__ = [
     "FLAG_Y",
     "FLAG_Z",
     "Z80CPU",
+    "BoundaryKind",
     "ByteReader",
     "CPUState",
+    "DebugSession",
+    "DebugTarget",
     "Flags",
     "Instruction",
+    "RunResult",
+    "StepRecord",
+    "StopReason",
     "disassemble",
     "disassemble_bytes",
 ]

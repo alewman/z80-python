@@ -87,6 +87,16 @@ The CPU does not automatically call a host's `read_byte()` method for debugging:
 mapped reads can acknowledge or mutate devices. A machine should expose a separate
 peek operation when live disassembly is safe. See [the disassembly contract](docs/disassembly.md).
 
+## Debug sessions
+
+`DebugSession` wraps an existing CPU host and adds bounded execution, execute
+breakpoints, lifecycle-aware step records, instruction/T-state totals, and bounded
+history. It does not subclass or modify the CPU and adds no cost when unused.
+
+Pass a side-effect-free peek function to include structured disassembly in each
+instruction record. Runs always require a finite step budget and return an explicit
+`StopReason`. See [the debug-session contract](docs/debug-session.md).
+
 ## Maskable interrupts
 
 The core provides a deterministic instruction-boundary model for external maskable
