@@ -16,3 +16,5 @@ htmlcov/
 # External validation inputs; fetch them locally, never commit them.
 tests/z80_test_vectors/
 tests/zex/
+validation/z80test_data/
+validation/interrupt_oracle_src/
