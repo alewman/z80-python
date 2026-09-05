@@ -197,7 +197,9 @@ def _decode_ed(cursor: _Cursor, start: int) -> Instruction:
     }
     if opcode in blocks:
         return _instruction(cursor, start, blocks[opcode])
-    raise NotImplementedError(f"unhandled ED opcode 0x{opcode:02X} at address 0x{start:04X}")
+    # Every other ED-prefixed byte is a genuine (if useless) Z80 instruction on
+    # real silicon: a 2-byte no-op, same as the 0x77/0x7F cases above.
+    return _instruction(cursor, start, "NOP")
 
 
 def _decode_main(cursor: _Cursor, start: int, opcode: int) -> Instruction:
