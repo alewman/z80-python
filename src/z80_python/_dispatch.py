@@ -194,6 +194,7 @@ class DispatchMixin:
             return self._op_in_r_c(opcode)
         if 0x41 <= opcode <= 0x79 and (opcode & 0x07) == 1:
             return self._op_out_c_r(opcode)
-        raise NotImplementedError(
-            f"unhandled ED opcode 0x{opcode:02X} at PC 0x{(self.pc - 2) & 0xFFFF:04X}"
-        )
+        # Every ED-prefixed byte not otherwise defined is a genuine Z80 instruction
+        # on real silicon: a 2-byte, 8 T-state no-op. Only 0x77/0x7F fell inside the
+        # documented 0x40-0x7F block; the rest of the ED space needs the same rule.
+        return self._op_ed_nop()
