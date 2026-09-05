@@ -74,6 +74,64 @@ On PowerShell, set `$env:Z80_PYTHON_ZEX_DIR` first. The tests use a finite
 10,000,000,000-instruction budget. Run them for release candidates or changes
 to instruction semantics, not ordinary documentation-only edits.
 
+## Hardware-oracle validation (z80test)
+
+SingleStepTests and ZEXALL both validate against corpora ultimately derived
+from other software (SingleStepTests from a corrected Ares core; ZEXALL by
+construction checks internal CRC self-consistency, not an external
+reference). Neither is a claim against real silicon.
+
+[raxoft/z80test](https://github.com/raxoft/z80test) closes that gap for the
+instructions and flags it covers: its expected values were captured by
+executing on a real 48K ZX Spectrum with a genuine Zilog Z80. The
+`validation.z80test_runner` adapter replaces the two ROM touchpoints the test
+programs use for output (`RST 0x10` and `CHAN-OPEN`) with a 3-byte stub that
+has no effect on tested CPU state; no ROM image is used or required. Fetch
+the pinned, MIT-licensed release with `python scripts/fetch_z80test.py`, then
+run `python -m pytest tests/test_z80test_suite.py -m integration -q`.
+
+`z80full`, `z80memptr`, and `z80ccf` all report `Result: all tests passed.`
+(`z80full` subsumes `z80doc`, `z80flags`, and `z80docflags`; `z80ccfscr` is a
+visual demo, not a pass/fail check). `z80ccf` in particular checks SCF/CCF's
+undocumented X/Y-flag behavior against the genuine NMOS Zilog convention --
+the specific corner where NMOS, CMOS, and NEC-clone Z80s are all known to
+disagree with each other.
+
+The precise claim this adds: **instruction semantics and flags, including
+the documented undocumented ones, are verified against real Zilog Z80
+hardware for the covered instruction groups.** It does not extend to
+interrupt sequencing or cycle/bus timing -- z80test verifies flags and
+registers, not T-states, and none of its programs exercise interrupts.
+
+## Independent-implementation cross-check (interrupt lifecycle)
+
+No publicly known hardware-captured test corpus exists for interrupt
+*sequencing* (IM 0/1/2 dispatch, NMI/INT priority, the EI-instruction delay,
+HALT wakeup) the way SingleStepTests and z80test exist for instruction
+semantics. `validation.interrupt_crosscheck` instead cross-checks against
+[superzazu/z80](https://github.com/superzazu/z80), a separately written,
+zexdoc/zexall-certified Z80 core, across ten deliberately adversarial
+scenarios spanning all three interrupt modes, NMI/HALT interaction, RETN's
+IFF1 restoration, the EI delay, DI-masking without losing a pending request,
+and NMI-vs-maskable priority. Fetch and build the pinned oracle with
+`python scripts/fetch_interrupt_oracle.py`, then run
+`python -m pytest tests/test_interrupt_crosscheck.py -m integration -q`.
+
+Nine of ten scenarios match exactly, including T-state totals. The tenth
+(IM 0 with a device-supplied RST) is a known bug in the oracle, not this
+core: superzazu double-charges the interrupt-acknowledge M1 cycle (see
+`tests/test_interrupt_crosscheck.py` for the full diagnosis), where this
+core's single-acknowledge-cycle accounting matches the documented model in
+[interrupt-lifecycle.md](interrupt-lifecycle.md).
+
+**This is cross-implementation triangulation, not a hardware oracle.** State
+it as "cross-verified against an independent implementation," never as
+"verified against hardware." One corner is deliberately left unscored:
+whether NMI can preempt the EI-instruction delay window. The oracle's
+control flow structurally cannot service NMI during that window, while this
+core's documented behavior has NMI ignore the EI delay entirely -- and there
+is no hardware authority available to arbitrate which is correct.
+
 ## Performance record
 
 On Windows 11, PyPy 7.3.20 / Python 3.11.13 produced warmed median rates of

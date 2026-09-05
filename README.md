@@ -31,7 +31,12 @@ The instruction core has passed:
   I/O ordering, T-states, alternate registers, `R`, WZ/MEMPTR, Q, and
   undocumented behavior; and
 - **ZEXDOC** and **ZEXALL** long-sequence CRC exercisers under both CPython and
-  PyPy.
+  PyPy; and
+- three of raxoft/z80test's hardware-derived suites (`z80full`, `z80memptr`,
+  `z80ccf`)—values captured from a real 48K ZX Spectrum's Zilog Z80, covering
+  instruction semantics and flags including SCF/CCF's undocumented X/Y-flag
+  behavior against the genuine NMOS convention. This is the project's first
+  certification against real silicon rather than a software-derived corpus.
 
 The current processor implementation was recertified after the lifecycle and
 inspection work. Exact source revisions, hashes, commands, timings, and scope
