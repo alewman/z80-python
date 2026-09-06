@@ -20,6 +20,7 @@ from validation.vector_utils import (
     VectorCPU,
     _main,
     assert_state_equal,
+    expected_state,
     load_json_vector,
     run_test_case,
     setup_cpu,
@@ -178,8 +179,9 @@ def test_run_test_case_returns_vector_shaped_final_state(
 
     actual = run_test_case(real_case)
     final = real_case["final"]
-    assert set(actual) == set(REGISTER_FIELDS) | {"ram"}
+    assert set(actual) == set(REGISTER_FIELDS) | {"ram", "t_states"}
     assert actual["ram"] == final["ram"]
+    assert actual["t_states"] == 4, "run_test_case must report what step() returned"
     for field in REGISTER_FIELDS:
         assert actual[field] == final[field], f"{field}: {actual[field]} != {final[field]}"
     # assert_state_equal tolerates the vector-only ei/p fields.
@@ -187,6 +189,23 @@ def test_run_test_case_returns_vector_shaped_final_state(
 
 
 # --- assert_state_equal ----------------------------------------------------
+
+
+def test_expected_state_adds_t_states_from_cycles(real_case: dict) -> None:
+    """One SingleStepTests ``cycles`` entry per T-state; no array, no expectation."""
+    expected = expected_state(real_case)
+    assert expected["t_states"] == len(real_case["cycles"])
+    assert expected["t_states"] > 0
+    untimed = {key: value for key, value in real_case.items() if key != "cycles"}
+    assert "t_states" not in expected_state(untimed)
+
+
+def test_assert_state_equal_reports_t_state_mismatch(real_case: dict) -> None:
+    expected = expected_state(real_case)
+    actual = {**real_case["final"], "t_states": expected["t_states"] + 1}
+    with pytest.raises(AssertionError, match="t_states: expected"):
+        assert_state_equal(expected, actual)
+    assert_state_equal(expected, {**real_case["final"], "t_states": expected["t_states"]})
 
 
 def test_assert_state_equal_passes_for_equal_states(real_case: dict) -> None:
