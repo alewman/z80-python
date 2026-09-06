@@ -33,6 +33,7 @@ class CoreMixin:
         self._io_data = 0
         self.halted = False
         self._ei_delay = 0
+        self.ei_nmi_iff2_erratum = False
         self._reset_pending = False
         self._pending_maskable_interrupt: int | None = None
         self._non_maskable_interrupt_pending = False
@@ -98,7 +99,14 @@ class CoreMixin:
 
         self._non_maskable_interrupt_pending = False
         self.halted = False
-        self.iff2 = self.iff1
+        if self.ei_nmi_iff2_erratum and self._ei_delay > 0:
+            # Opt-in NMOS quirk: an NMI landing inside EI's one-instruction
+            # delay window resets IFF2 as well as IFF1, instead of IFF2
+            # preserving the pre-NMI IFF1 value for a later RETN. See
+            # docs/interrupt-lifecycle.md.
+            self.iff2 = False
+        else:
+            self.iff2 = self.iff1
         self.iff1 = False
         self._inc_r()
         self._push_word(self.pc)

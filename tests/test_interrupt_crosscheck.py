@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from validation.interrupt_crosscheck import SCENARIOS, _LIBRARY, run_scenario
+from validation.interrupt_crosscheck import _LIBRARY, SCENARIOS, run_scenario
 
 _KNOWN_ORACLE_BUGS = {
     "IM0 device-supplied RST 10h": (

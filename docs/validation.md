@@ -126,11 +126,15 @@ core's single-acknowledge-cycle accounting matches the documented model in
 
 **This is cross-implementation triangulation, not a hardware oracle.** State
 it as "cross-verified against an independent implementation," never as
-"verified against hardware." One corner is deliberately left unscored:
-whether NMI can preempt the EI-instruction delay window. The oracle's
-control flow structurally cannot service NMI during that window, while this
-core's documented behavior has NMI ignore the EI delay entirely -- and there
-is no hardware authority available to arbitrate which is correct.
+"verified against hardware." The oracle also turns out to be structurally
+unable to service an NMI during the EI-instruction delay window at all --
+but that specific question has an independent answer: the Zilog manual
+states the one-instruction delay only for the maskable interrupt, and real
+ZX Spectrum hardware test ROMs (`EI48K`) confirm NMI ignores it. See the
+"EI+NMI" section of [interrupt-lifecycle.md](interrupt-lifecycle.md) for the
+one genuinely unconfirmed corner this surfaced: an opt-in, off-by-default
+NMOS erratum sourced from gate-level simulation rather than a hardware
+measurement.
 
 ## Performance record
 
