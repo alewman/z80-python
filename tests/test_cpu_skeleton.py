@@ -1,8 +1,8 @@
-"""Unit tests for the Z80 CPU skeleton (src/z80/cpu.py)."""
+"""Unit tests for the Z80 CPU skeleton (src/z80_python/)."""
 
 import pytest
 
-from z80.cpu import (
+from z80_python.cpu import (
     FLAG_C,
     FLAG_H,
     FLAG_N,

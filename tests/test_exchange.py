@@ -1,4 +1,4 @@
-"""Unit tests for the Z80 exchange group (src/z80/cpu.py), opcode 0xEB.
+"""Unit tests for the Z80 exchange group (src/z80_python/), opcode 0xEB.
 
 The authoritative check for this group is the per-opcode SingleStepTests/z80
 vector suite run by ``tests/test_z80.py`` (``eb.json`` for EX DE,HL, 1000
@@ -19,7 +19,7 @@ which is the intended regression signal.
 
 from __future__ import annotations
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):

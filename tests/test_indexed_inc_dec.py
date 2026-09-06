@@ -16,7 +16,7 @@ resulting target memory value, the unchanged index register and the PC
 advance.  No parametrization, no vector-file plumbing -- four standalone
 test functions, one per opcode form.
 
-Why this file is red by design: the CPU core (src/z80/cpu.py) dispatches the
+Why this file is red by design: the CPU core (src/z80_python/) dispatches the
 DD/FD index-prefix family through ``_execute_index``, but sub-opcodes 0x34
 and 0x35 are not handled there yet, so both raise ``NotImplementedError``.
 Every unit test below therefore fails today, because the family is
@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import pytest
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):
