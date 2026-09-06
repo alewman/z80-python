@@ -16,18 +16,7 @@ results into a per-opcode pass/fail report:
 
 from __future__ import annotations
 
-import sys
-
 import pytest
-
-import z80_python
-import z80_python.cpu
-
-# The extracted test corpus predates the distribution/import rename.  Keep the
-# test-only alias while individual regression tests retain their historical
-# imports; the public package exposes only ``z80_python``.
-sys.modules.setdefault("z80", z80_python)
-sys.modules.setdefault("z80.cpu", z80_python.cpu)
 
 #: Per-file counters, keyed by the vector JSON file name
 #: (e.g. ``"dd cb __ 06.json"``).  Mutated by ``tests/test_z80.py`` through the

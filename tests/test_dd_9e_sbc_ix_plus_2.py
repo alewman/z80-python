@@ -15,7 +15,7 @@ advance PC to 0x2003, latch WZ to the effective address 0x4002, latch Q to
 
 from __future__ import annotations
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):

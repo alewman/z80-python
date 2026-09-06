@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):

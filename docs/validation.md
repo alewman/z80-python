@@ -12,6 +12,33 @@ scheduling, or memory contention.
 The specific lifecycle contract, mode coverage, and remaining exclusions are in
 [interrupt-lifecycle.md](interrupt-lifecycle.md).
 
+## Certification record: commit `9e15acc` (2026-09-06)
+
+Reproduced on Linux x86_64 under both supported interpreters, CPython 3.14.4
+and PyPy 7.3.20 / Python 3.11.13, against the pinned oracles named in the
+sections below. The instruction core is byte-identical between `50125da` and
+`9e15acc`; the CPython ZEX runs were started on the former and the later
+commit changed only `scripts/fetch_z80test.py`.
+
+| Gate | Result | CPython 3.14.4 | PyPy 7.3.20 |
+| --- | --- | ---: | ---: |
+| SingleStepTests, 1,604 files, 1,604,000 cases, registers + RAM + I/O + **T-states** | all passed | 28 s | 110 s (with fast suite) |
+| Fast suite incl. `tests/test_readability.py` | 3,089 passed | 2 s | (included above) |
+| ZEXDOC | `Tests complete`, no `ERROR` | 5,523.8 s | 358.4 s |
+| ZEXALL | `Tests complete`, no `ERROR` | 5,623.7 s | 340.8 s |
+| z80test `z80full` / `z80ccf` / `z80memptr` | all tests passed | 221.9 / 116.8 / 104.8 s | 8.9 / 4.0 / 6.3 s |
+| Interrupt cross-check vs superzazu/z80 | 9 match, 1 xfail (oracle's known IM 0 double-charge) | < 1 s | < 1 s |
+
+PyPy was installed from the official `pypy3.11-v7.3.20-linux64` tarball
+(SHA-256 `1410db3a…ccb3e`, matching pypy.org's checksum page), the same
+interpreter version as the 0.2.0/0.3.0 record.
+
+Reproduction defect fixed on the way: `scripts/fetch_z80test.py` extracted the
+release into a nested `z80test-1.2a/` directory, so the documented
+`pytest tests/test_z80test_suite.py -m integration` reported three skips
+rather than running. The script now flattens the archive and fails if the
+programs are missing.
+
 ## One-step vector corpus
 
 The complete `SingleStepTests/z80` corpus used for certification contains 1,604
@@ -19,6 +46,14 @@ opcode/prefix variants with 1,000 initial-to-final state transitions each:
 **1,604,000 cases total**. It observes registers, flags, RAM effects, I/O
 ordering, refresh register `R`, WZ/MEMPTR, Q, alternate registers, and returned
 T-state counts. It is an instruction oracle, not a bus-pin trace.
+
+Every case also carries a `cycles` array with one entry per T-state the oracle
+spent on the instruction. The vector gate compares its length against the value
+`Z80CPU.step()` returns, so the T-state claim below is checked by the same
+1,604,000 cases as the state claim: taken versus not-taken conditional branches,
+21-versus-16 block repeats, and the 4 T-states every DD/FD prefix adds. Earlier
+harness revisions compared registers, RAM, and I/O only; T-states were then
+pinned by per-opcode unit tests alone.
 
 The corpus is external, MIT-licensed, and deliberately not bundled. The pinned
 source is:
@@ -143,3 +178,21 @@ On Windows 11, PyPy 7.3.20 / Python 3.11.13 produced warmed median rates of
 for block I/O. These are workload-specific benchmark results, not a universal
 performance guarantee. PyPy is an optional, measured interpreter; CPython and
 PyPy are both supported by the current validation evidence.
+
+The `9e15acc` certification re-measured on a shared 32-core Linux x86_64 host
+(load average about 5 from other users, so absolute figures are not comparable
+to the Windows row). To isolate the effect of the handler relocation and
+docstring work in `ab6ef87`, the pre-change commit `d54cad1` and `9e15acc` were
+benchmarked interleaved under the same PyPy, two rounds of seven repeats each,
+best median reported:
+
+| Workload | `d54cad1` inst/s | `9e15acc` inst/s | Change |
+| --- | ---: | ---: | ---: |
+| base | 39,070,880 | 42,555,942 | +8.9% |
+| indexed_cb | 4,187,582 | 4,722,226 | +12.8% |
+| block_io | 41,914,342 | 46,263,089 | +10.4% |
+
+Under CPython 3.14.4 the same comparison was within 1% on all three workloads.
+The dispatch shape was preserved by design; the PyPy gain most likely comes
+from the removed `_op_prefix_ignored_basic` indirection on NOP, LD rr,nn,
+EX AF,AF' and DJNZ, which the base workload exercises heavily.

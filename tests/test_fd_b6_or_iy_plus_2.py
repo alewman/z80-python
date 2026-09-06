@@ -21,7 +21,7 @@ and asserts:
 * the instruction consumes 19 T-states, the audited indexed-memory family
   count.
 
-Why this file is red by design: the CPU core (src/z80/cpu.py) dispatches the
+Why this file is red by design: the CPU core (src/z80_python/) dispatches the
 DD/FD index-prefix family through ``_execute_index``, but sub-opcode 0xB6 is
 not handled there yet, so it raises ``NotImplementedError``.  The unit test
 below therefore fails today, because the family is unimplemented -- that is
@@ -30,7 +30,7 @@ the regression this file pins.
 
 from __future__ import annotations
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):
