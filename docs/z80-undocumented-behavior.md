@@ -1,117 +1,133 @@
-# Z80 Undocumented Behavior — Read This Before Touching Flags
+# Z80 undocumented behavior: mechanism first, then the rules
 
-**Read this before grepping/paging through `tests/z80_test_vectors/generation/z80_test_generator.js`.**
-Every opcode-group task so far has independently re-derived the Q register, WZ
-(MEMPTR), and undocumented X/Y flag mechanics from scratch by reading that file
-in a dozen-plus small chunks and grepping for the same handful of symbols. That
-repeated research is the single biggest cause of tasks failing on "exceeded
-maximum turns" or a blown context window — not incorrect CPU logic. This
-document exists to make that a one-time cost instead of a per-task cost.
-**If you learn something about undocumented behavior that isn't written down
-here, add it to this file before finishing your task** — that's what makes
-the investment compound instead of resetting for the next task.
+The Z80 has behavior Zilog never documented that real software depends on:
+two flag bits that copy whatever happened to be on an internal bus, an
+address latch that leaks into one instruction's flags, and a refresh counter
+games use as a random source. This core models all of it, and the vector
+corpus checks all of it. This page explains *why* each effect exists, so the
+rules below read as consequences instead of trivia. Each rule names the line
+of source that encodes it; the comment on that line says the same thing in
+one sentence.
 
-## Reusable infrastructure that already exists — use it, don't re-derive it
+Read [start-here](start-here.md) first if the register names are new to you.
 
-The private implementation modules under `src/z80_python/` already have the
-plumbing for all three mechanisms below. The stable public API remains in
-`src/z80_python/cpu.py`.
-Call the existing methods; do not re-implement flag-copying logic per opcode.
+## The mechanisms
 
-- `Flags.set_xy(value)` — copies bits 3 and 5 of `value` into the undocumented
-  X/Y flags. Call this with whatever byte the *general rule* below says X/Y
-  should come from for your instruction.
-- `self.q` + `self._update_q(flags_modified: bool)` — the Q register. Call
-  `self._update_q(True)` at the end of any instruction that writes `self.f`,
-  `self._update_q(False)` for every other instruction (including ones that
-  read flags but don't change them). This must be called for **every**
-  instruction, not just flag-affecting ones — CCF/SCF need to see a `q` of
-  `0` when the *previous* instruction didn't touch flags.
-- `self.wz` — the WZ/MEMPTR internal address latch, plus `self._io_data` —
-  the last byte transferred by a block I/O step (read back by the repeated
-  block I/O instructions for their post-repeat flag adjustment). Several load
-  instructions already set `wz` correctly (see `LD A,(nn)` / `LD (nn),A` in
-   `_loads.py` for the pattern) — follow that same pattern for any new
-  instruction that computes a 16-bit address, rather than reasoning about WZ
-  from first principles again.
+### X and Y: bits 3 and 5 of F copy the internal bus
 
-## The Q register (drives CCF/SCF's undocumented X/Y behavior)
+Bits 3 and 5 of the flag register have no defined meaning. On hardware they
+are simply latched from whatever byte the ALU's result bus carries at the
+moment flags are written. For ordinary arithmetic, logic, rotates, `INC`,
+`DEC`, `DAA`, and `NEG` that byte is the result, so **X/Y are bits 3 and 5 of
+the result**. `Flags.set_xy(value)` does the copy; `_set_xysz` in `_alu.py`
+is the common path.
 
-Q is not an official Zilog register name — it's the bookkeeping convention
-this test oracle (and most high-accuracy emulators) uses to track "did the
-immediately preceding instruction write the F register, and if so, what did
-it leave behind." `CCF` and `SCF`'s undocumented X/Y flags depend on whether
-the prior instruction modified flags. **The exact bit formula for CCF/SCF is
-one of the hairiest corners in the entire undocumented-behavior space** (see
-Patrik Rak's "Z80 SCF/CCF Flags Reloaded") — don't guess it from memory or
-first-principles reasoning. Grep the generator for the exact formula (search
-terms below) and, more importantly, just implement it against the `cb 00`-style
-JSON vectors directly (`ed 44.json`-equivalents for whichever opcode you're
-on) — the vectors are ground truth regardless of what any doc (including this
-one) says.
+Every exception is a case where the byte on the bus is *not* the result:
 
-## WZ / MEMPTR
+- **`CP`** is a subtraction whose result is discarded. The operand is what
+  remains on the bus, so X/Y come from the operand (`_alu.py`, `_cp`).
+- **16-bit `ADD`/`ADC`/`SBC HL,rr`** finish with the high byte, so X/Y come from
+  the high byte of the result (`_alu.py`, `_add16`, `_sub16`, `_op_add_hl_rr`).
+- **`BIT n,(HL)`** reads memory through the address latch; X/Y come from the
+  high byte of WZ, not from the byte tested (`_rotate.py`, `_op_bit`). The
+  register form `BIT n,r` has no such exception. The indexed forms
+  `BIT n,(IX+d)` behave the same way with WZ = IX+d (`_index.py`,
+  `_op_index_bit`).
+- **Block loads `LDI`/`LDD`** put A + transferred byte on the bus, and the two
+  bits land in positions 3 and **1**, not 3 and 5 (`_blocks.py`, `_block_ld`).
+- **Block compares `CPI`/`CPD`** use A - (HL) - H, the intermediate before the
+  final correction, with the same 3-and-1 placement (`_blocks.py`,
+  `_block_cp`).
+- **Block I/O `INI`/`IND`/`OUTI`/`OUTD`** take S, Z, X, and Y from the new B,
+  with N, H, C, and PV from sums involving the byte moved (`_io.py`,
+  `_block_ini`, `_block_outi`).
+- **Repeating forms** (`LDIR`, `CPIR`, `INIR`, `OTIR`, and the D variants)
+  rewind PC by 2 and re-fetch. On each such repeat X/Y come from bits 3 and 5
+  of the rewound PC's high byte, and WZ becomes PC + 1 (`_blocks.py`,
+  `_block_repeat`). The I/O repeats additionally correct PV and H from B
+  (`_io.py`, `_post_in_o_r`).
+- **`SCF`/`CCF`** depend on Q, next.
 
-An internal 16-bit address latch, not directly readable by any instruction,
-but observable through its effect on a small number of instructions' flags.
-General rule of thumb for *when it's set*: any instruction that computes a
-16-bit address as part of its own operation (`LD A,(nn)`/`LD (nn),A`,
-`LD dd,(nn)`/`LD (nn),dd`, `EX (SP),HL`, indexed `(IX+d)`/`(IY+d)` forms,
-`JP (HL)`, block I/O port reads, relative jumps, `CALL`/`RST`) sets WZ to that
-computed address (usually address+1 for the high-byte-follow-up case — see
-the existing `LD A,(nn)` implementation for the exact pattern). The specific
-corner that actually matters for flags: **`BIT n,(HL)` and `BIT n,(IX+d)` /
-`BIT n,(IY+d)` copy the undocumented X/Y flags from the high byte of WZ, not
-from the tested byte itself.** This is the single most common place a BIT-group
-task gets X/Y wrong. Non-indexed `BIT n,r` (register form) has no such
-exception — X/Y there just come from the general rule below.
+### Q: what the previous instruction did to F
 
-Block transfer/search group: the non-repeated `LDI`/`LDD` leave WZ untouched,
-while `CPI`/`CPD` step WZ by ±1 on every iteration.  The repeated variants
-(`LDIR`/`LDDR`/`CPIR`/`CPDR`) additionally rewind PC by 2 on every non-final
-iteration and set **WZ = rewound PC + 1**, also copying X/Y from PC bits 11/13
-— so a multi-iteration `CPIR`/`CPDR` loop ends with WZ derived from the
-instruction address (e.g. a `CPIR` at 0x1000 finishes at WZ 0x1002), not from
-whatever WZ held before the loop.  Each repeated step costs 21 T-states; the
-final (non-rewinding) step costs 16.
+`SCF` and `CCF` write only C, H, and N; on hardware their X/Y still come from
+the internal bus, which at that moment carries A OR-ed with whatever the flag
+latch still holds. Whether the latch holds F or nothing depends on whether
+the *previous* M1 cycle wrote flags. Emulators model this with a byte called
+Q: equal to F after any instruction that writes flags, 0 after any that does
+not. The rule is then:
 
-## X/Y flags (bits 3 and 5) — the general rule, then the named exceptions
+```text
+X/Y = bits 3 and 5 of  (A | F)   if Q == 0   (previous instruction left flags alone)
+X/Y = bits 3 and 5 of   A        if Q != 0   (previous instruction wrote flags)
+```
 
-**General rule**: for the large majority of flag-affecting instructions
-(8-bit ALU ops, INC/DEC, rotates/shifts, `AND`/`OR`/`XOR`, `CP`, `DAA`, `NEG`),
-X and Y are a direct copy of bits 3 and 5 of the instruction's own 8-bit
-result — call `self.f.set_xy(result)` with that result byte and you're done.
-Named exceptions that need special-casing (grep the generator for each,
-don't assume the general rule applies):
+That is the genuine Zilog NMOS behavior, verified by raxoft's `z80ccf` test
+against real silicon; CMOS Zilog parts and NEC clones differ, and this core
+does not model them. `_core.py` `_update_q` is the whole Q model and is
+called at the end of every instruction, including ones that do not touch
+flags, because the "0" case is what `CCF` needs to see. A DD or FD prefix is
+its own M1 cycle that writes no flags, so a prefixed `SCF`/`CCF` always sees
+Q = 0; `_op_scf_ccf` takes a `prefixed` flag for that (`_alu.py`).
 
-1. **`BIT n,(HL)` / `BIT n,(IX+d)` / `BIT n,(IY+d)`** — X/Y come from WZ's
-   high byte (see above), not from the tested value. Register-form `BIT n,r`
-   is NOT an exception.
-2. **`CCF` / `SCF`** — depend on `self.q` (see above). Verify the exact
-   formula against the vectors, don't guess it.
-3. **Block LD group** (`LDI`/`LDD`/`LDIR`/`LDDR`) — X/Y come from
-   `A + transferred_byte`, not from any flag-style "result." Bit 3 of that
-   sum goes to the undocumented X-equivalent slot and bit 1 to the
-   Y-equivalent slot (the bit positions are shuffled relative to a normal
-   `set_xy` call for this group specifically — verify against `ed a0.json`
-   (`LDI`) directly rather than assuming `set_xy` applies as-is).
-4. **Block CP group** (`CPI`/`CPD`/`CPIR`/`CPDR`) — X/Y come from
-   `A - (HL) - half_carry_bit`, with the same bit-position shuffle as the
-   block LD group. Verify against `ed a1.json` (`CPI`) directly.
+### WZ (MEMPTR): the address latch
 
-## Efficient research protocol (if this doc doesn't cover your opcode)
+The Z80 has one internal 16-bit temporary through which every computed
+address and every 16-bit operand passes. It is called WZ in Zilog's own
+terminology and MEMPTR in the community's. It is not readable by any
+instruction; its only architectural leak is `BIT n,(HL)` above. But because
+that leak is observable, the vectors check WZ after every instruction, and a
+port has to track it exactly.
 
-1. Check this file and the instruction-family modules under `src/z80/` first —
-   most of the mechanism you need probably already exists. Core state and
-   register helpers are in `_core.py`; arithmetic helpers are in `_alu.py`.
-2. If you must consult `z80_test_generator.js`, use a **specific** grep
-   pattern and read only the matched region once — don't page through broad
-   line ranges speculatively. Patterns that have reliably found the relevant
-   code in this codebase so far: `set_q|sq|this\.Q`, `WZH|WZL`,
-   `setXY|parity\(`, plus the instruction's own mnemonic (e.g. `BIT_o|RES_o`).
-3. Once you've found the formula, **implement and verify it against the
-   actual JSON vectors** (`tests/z80_test_vectors/v1/<opcode>.json`) — that's
-   the real ground truth this whole project is validated against, not the
-   generator source or this document.
-4. If you find a real discrepancy between this document and the vectors, the
-   vectors win — fix this document to match before finishing your task.
+The pattern: an instruction that reads or writes through a 16-bit address
+leaves WZ at **address + 1**, because the last thing the latch did was step to
+the high byte (`LD A,(nn)`, `LD HL,(nn)`, `LD (nn),rr`, `IN A,(n)`, `ADD HL,rr`,
+`RLD`/`RRD`). Jumps, calls, `RST`, and returns leave WZ at the **target**
+(`JP` even when not taken, because the operand fetch itself loads the latch;
+`JR` only when taken, because the target is never computed otherwise).
+`EX (SP),HL` leaves the value read from the stack. Two forms are odd:
+`LD (BC)/(DE)/(nn),A` and `OUT (n),A` step only the low byte of the address
+and overwrite the high byte with A, the value that was on the data bus, giving
+WZ = A:(addr+1 & 0xFF) (`_loads.py`, `_io.py`). `CPI`/`CPD` step WZ by +/-1
+each iteration; `LDI`/`LDD` leave it alone; the repeats set it to PC + 1 as
+above. Every WZ write in the source has a comment naming which of these it is.
+
+### R: the refresh counter
+
+R increments once per M1 cycle in its low 7 bits; bit 7 is preserved and only
+`LD R,A` can set it (`_core.py`, `_inc_r`). "Per M1 cycle" means once per
+opcode fetch **and once per prefix byte**, never for operand or displacement
+bytes. So an unprefixed instruction adds 1, `ED xx` and `DD xx` add 2, and
+`DD CB d xx` adds 2, not 4, because the trailing opcode byte is fetched as an
+operand (`_index_dispatch.py`). A `HALT`ed CPU keeps fetching and adds 1 per
+idle step. Interrupt and NMI acceptance add 1.
+
+### Other undocumented instructions the core implements
+
+- IXH/IXL/IYH/IYL as 8-bit registers in every DD/FD form that names H or L
+  outside an `(IX+d)` operand (`_index.py`).
+- `DD CB`/`FD CB` rotates, `RES`, and `SET` with z != 6 also copy the result
+  into `r[z]` (`_index.py`, `_op_index_rot`, `_op_index_res_set`).
+- `SLL` (CB 30-37): shift left and set bit 0 (`_rotate.py`, `_sll`).
+- `IN (C)` / `IN F,(C)` (ED 70): sets flags, stores nothing (`_io.py`).
+- `OUT (C),0` (ED 71): NMOS parts output 0 (`_io.py`).
+- Every undefined ED opcode is an 8-T-state NOP (`_dispatch.py`).
+- `NEG`, `RETN`, and `IM` have several aliases in the ED table.
+
+## Where the truth lives
+
+The rules above are derived from the code, and the code is derived from
+oracles, in this order of authority:
+
+1. The pinned SingleStepTests corpus checks every rule on this page for every
+   opcode, including WZ, Q, R, and T-states. If this page and a vector
+   disagree, the vector wins; fix the page.
+2. raxoft/z80test checks flags, including `SCF`/`CCF`, against a real Zilog
+   NMOS Z80.
+3. ZEXALL checks the same X/Y behavior across long sequences.
+
+If you need a rule that is not here, look at the comment on the handler first;
+the generator inside the fetched corpus
+(`tests/z80_test_vectors/generation/z80_test_generator.js`) is the last resort
+and is not part of this repository. When you learn something new, add it to
+this page and to the line of code that implements it.

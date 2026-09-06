@@ -22,7 +22,7 @@ instruction, and asserts the invariants:
 * the instruction consumes 19 T-states, the audited indexed-memory family
   count (same as LD r,(IX/IY+d) and LD (IX/IY+d),n).
 
-Why this file is red by design: the CPU core (src/z80/cpu.py) dispatches the
+Why this file is red by design: the CPU core (src/z80_python/) dispatches the
 DD/FD index-prefix family through ``_execute_index``, but sub-opcode 0x96 is
 not handled there yet, so it raises ``NotImplementedError``.  The unit test
 below therefore fails today, because the family is unimplemented -- that is
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import pytest
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):

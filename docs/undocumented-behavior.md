@@ -1,9 +1,9 @@
-# Undocumented behavior notes
+# Undocumented behavior
 
-The detailed implementation guidance is maintained in
-[z80-undocumented-behavior.md](z80-undocumented-behavior.md). It covers the
-modeled Q register, WZ/MEMPTR, refresh-state effects, and undocumented X/Y flag
-rules that are observed by the pinned vector corpus.
+The full explanation of the X/Y flags, Q, WZ/MEMPTR, and the refresh register,
+mechanism first and then the rules with their source locations, is
+[z80-undocumented-behavior.md](z80-undocumented-behavior.md). Newcomers should
+read [start-here.md](start-here.md) before it.
 
-For semantic changes, treat the vectors as the ground truth and run the full
-vector gate after updating focused regression tests.
+For semantic changes, the pinned vector corpus is the ground truth: update the
+focused regression test, then run the full vector gate.

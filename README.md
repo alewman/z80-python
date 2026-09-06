@@ -79,8 +79,13 @@ python -m pip install z80-python
 ```text
 git clone https://github.com/alewman/z80-python.git
 cd z80-python
+python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
 python -m pip install -e .
 ```
+
+Recent Debian, Ubuntu, Fedora, and Homebrew Pythons refuse `pip install` into
+the system interpreter (PEP 668); the virtual environment line above is the
+supported way around that.
 
 For tests, linting, and development tools:
 
@@ -182,10 +187,16 @@ portable, and useful across different machines.
 
 ## Learning and inspection
 
+New to the Z80? Read [Start here](docs/start-here.md) first: the register file,
+the flag byte, the opcode bit fields every handler decodes, the prefix model,
+and the three internal registers (WZ, Q, R) that only emulator authors meet.
+
 The implementation is organized by instruction family behind a small public
-`Z80CPU` facade. Conventional Python control flow keeps opcode behavior easy to
-trace from dispatch to implementation, including documented comments around
-undocumented Z80 behavior.
+`Z80CPU` facade. Every opcode handler's docstring starts with its Zilog
+mnemonic, so `grep DJNZ src/` lands on the implementation, and the hardware
+reason behind each undocumented flag or MEMPTR effect is a comment on the line
+that encodes it. A test (`tests/test_readability.py`) enforces the first
+property the same way the vector gate enforces correctness.
 
 The development tree also provides immutable `CPUState` capture and restoration
 for processor-owned state and a complete structured disassembler for every opcode
@@ -265,7 +276,8 @@ reproduction instructions and finite execution budgets are documented in
 - [Disassembly](docs/disassembly.md)
 - [Debug sessions](docs/debug-session.md)
 - [Trace comparison](docs/trace-comparison.md)
-- [Undocumented behavior notes](docs/undocumented-behavior.md)
+- [Start here: Z80 primer](docs/start-here.md)
+- [Undocumented behavior](docs/undocumented-behavior.md)
 - [Debugging and agent-tooling roadmap](docs/debugging-roadmap.md)
 - [Contribution guidance](CONTRIBUTING.md)
 

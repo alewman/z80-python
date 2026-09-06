@@ -1,4 +1,4 @@
-"""Unit tests for the Z80 ED block transfer and search group (src/z80/cpu.py).
+"""Unit tests for the Z80 ED block transfer and search group (src/z80_python/).
 
 The authoritative check for this group is the per-opcode SingleStepTests/z80
 vector suite run by ``tests/test_z80.py`` (ed a0.json/ed a1.json/ed a8.json/
@@ -21,7 +21,7 @@ the transfer exactly where it left off -- see
 
 from __future__ import annotations
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 FLAG_S = 0x80
 FLAG_Z = 0x40
