@@ -12,6 +12,31 @@ scheduling, or memory contention.
 The specific lifecycle contract, mode coverage, and remaining exclusions are in
 [interrupt-lifecycle.md](interrupt-lifecycle.md).
 
+## Certification record: commit `9e15acc` (2026-09-06)
+
+Reproduced on Linux, CPython 3.14.4, against the pinned oracles named in the
+sections below. The instruction core is byte-identical between `50125da` and
+`9e15acc`; the ZEX runs were started on the former and the later commit
+changed only `scripts/fetch_z80test.py`.
+
+| Gate | Result | Wall time |
+| --- | --- | ---: |
+| SingleStepTests, 1,604 files, 1,604,000 cases, registers + RAM + I/O + **T-states** | all passed | 28 s |
+| Fast suite incl. `tests/test_readability.py` | 3,089 passed | 2 s |
+| ZEXDOC | `Tests complete`, no `ERROR` | 5,523.8 s |
+| ZEXALL | `Tests complete`, no `ERROR` | 5,623.7 s |
+| z80test `z80full` / `z80ccf` / `z80memptr` | all tests passed | 221.9 / 116.8 / 104.8 s |
+| Interrupt cross-check vs superzazu/z80 | 9 match, 1 xfail (oracle's known IM 0 double-charge) | < 1 s |
+
+Not reproduced in this record: the PyPy rows below, because PyPy was not
+available on the certifying machine. They stand as the 0.2.0/0.3.0 record.
+
+Reproduction defect fixed on the way: `scripts/fetch_z80test.py` extracted the
+release into a nested `z80test-1.2a/` directory, so the documented
+`pytest tests/test_z80test_suite.py -m integration` reported three skips
+rather than running. The script now flattens the archive and fails if the
+programs are missing.
+
 ## One-step vector corpus
 
 The complete `SingleStepTests/z80` corpus used for certification contains 1,604
