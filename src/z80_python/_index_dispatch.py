@@ -1,4 +1,11 @@
-"""DD/FD index-prefix dispatcher."""
+"""DD/FD index-prefix dispatcher.
+
+A DD or FD prefix is its own M1 fetch on real hardware: it costs 4 T-states and
+bumps R before the opcode after it is fetched. Base-set opcodes that the prefix
+does not modify therefore run their ordinary handler and add that 4 here; the
+handlers that take a ``prefix`` argument already include the prefix cost in
+their documented totals.
+"""
 
 
 class IndexDispatchMixin:
@@ -7,6 +14,8 @@ class IndexDispatchMixin:
     def _execute_index(self, prefix: int, sub_opcode: int) -> int:
         if sub_opcode == 0xCB:
             displacement = self._read_operand_byte()
+            # The final DDCB opcode byte is read as an operand, not an M1 fetch, so R
+            # advances only for the DD and CB prefixes.
             cb_opcode = self._read_operand_byte()
             if cb_opcode <= 0x3F:
                 return self._op_index_rot(prefix, displacement, cb_opcode)
@@ -23,8 +32,14 @@ class IndexDispatchMixin:
             )
         if sub_opcode == 0x76:
             return self._op_halt() + 4
-        if sub_opcode in (0x00, 0x01, 0x08, 0x10, 0x11, 0x31):
-            return self._op_prefix_ignored_basic(sub_opcode) + 4
+        if sub_opcode == 0x00:
+            return self._op_nop() + 4
+        if sub_opcode in (0x01, 0x11, 0x31):
+            return self._op_ld_rr_nn(sub_opcode) + 4
+        if sub_opcode == 0x08:
+            return self._op_ex_af_af() + 4
+        if sub_opcode == 0x10:
+            return self._op_djnz() + 4
         if sub_opcode in (
             0x40,
             0x41,

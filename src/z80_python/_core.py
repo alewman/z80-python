@@ -39,11 +39,19 @@ class CoreMixin:
         self._non_maskable_interrupt_pending = False
 
     def _inc_r(self) -> None:
+        # R counts M1 (opcode fetch) cycles in its low 7 bits; bit 7 is only ever
+        # written by LD R,A and is preserved across the increment.
         self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
 
     def _update_q(self, flags_modified: bool) -> None:
+        # Q mirrors the ALU's last flag output: the new F when this instruction wrote
+        # flags, else 0. Only SCF/CCF read it (undocumented X/Y). Q=0 from writing
+        # F=0 is indistinguishable from 'not written', harmlessly: F's X/Y are 0 too.
         self.q = self.f.byte if flags_modified else 0
 
+    # An opcode or prefix fetch is an M1 cycle and bumps R; operand and
+    # displacement bytes (_read_operand_byte) are ordinary reads and do not.
+    # That is why DD CB d op advances R by 2 (two prefixes) and not 4.
     def _fetch_byte(self) -> int:
         value = self.read_byte(self.pc)
         self.pc = (self.pc + 1) & 0xFFFF

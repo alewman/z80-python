@@ -24,8 +24,14 @@ class DispatchMixin:
         return self._op_set(sub_opcode)
 
     def _execute_main(self, opcode: int) -> int:
-        if opcode in (0x00, 0x01, 0x08, 0x10, 0x11, 0x31):
-            return self._op_prefix_ignored_basic(opcode)
+        if opcode == 0x00:
+            return self._op_nop()
+        if opcode in (0x01, 0x11, 0x21, 0x31):
+            return self._op_ld_rr_nn(opcode)
+        if opcode == 0x08:
+            return self._op_ex_af_af()
+        if opcode == 0x10:
+            return self._op_djnz()
         if opcode == 0x76:
             return self._op_halt()
         if 0x40 <= opcode <= 0x7F and opcode != 0x76:
@@ -40,8 +46,6 @@ class DispatchMixin:
             return self._op_ld_a_inn()
         if opcode == 0x32:
             return self._op_ld_inn_a()
-        if opcode == 0x21:
-            return self._op_ld_hl_nn()
         if opcode in (0x37, 0x3F):
             return self._op_scf_ccf(opcode, prefixed=False)
         if opcode == 0x22:
