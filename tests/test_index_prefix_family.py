@@ -31,7 +31,7 @@ oracle and the Z80 reference):
 * ``JP (IX/IY)`` -- 8 T-states; PC = index; R += 2; flags untouched;
   Q cleared; WZ untouched.
 
-Why this file is red by design: the CPU core (src/z80/cpu.py) currently
+Why this file is red by design: the CPU core (src/z80_python/) currently
 dispatches only the CB and ED prefixes in ``decode_and_execute``; a DD or FD
 prefix falls through to ``_execute_main`` and raises ``NotImplementedError``.
 Every unit test below therefore fails today, and every per-opcode vector
@@ -53,7 +53,7 @@ from pathlib import Path
 import pytest
 
 from validation.vector_utils import assert_state_equal, load_json_vector, run_test_case
-from z80.cpu import (
+from z80_python.cpu import (
     FLAG_C,
     FLAG_H,
     FLAG_PV,
@@ -136,7 +136,7 @@ def _reference_add16_flags(x: int, y: int, f_before: int) -> tuple[int, int]:
     """ADD HL/IX/IY,rr flag recipe: H/N/C/X/Y recomputed, S/Z/PV preserved.
 
     Mirrors the SingleStepTests/z80 generator used by ``_op_add_hl_rr`` in
-    src/z80/cpu.py: C = carry out of bit 15, H = carry out of bit 11, N is
+    src/z80_python/: C = carry out of bit 15, H = carry out of bit 11, N is
     cleared, and X/Y are copied from the high byte of the 16-bit result.
     """
     result = x + y

@@ -27,7 +27,7 @@ and the other an arithmetic edge case (A=0x7F + (0x4FFD)=0x01, the signed
 overflow into the sign bit that sets S/H/P/V).  No parametrization, no
 vector-file plumbing -- two standalone test functions, one per opcode form.
 
-Why this file is red by design: the CPU core (src/z80/cpu.py) dispatches the
+Why this file is red by design: the CPU core (src/z80_python/) dispatches the
 DD/FD index-prefix family through ``_execute_index``, but sub-opcode 0x86 is
 not handled there yet, so both forms raise ``NotImplementedError``.  Every
 unit test below therefore fails today, because the family is unimplemented --
@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import pytest
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):

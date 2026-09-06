@@ -74,6 +74,8 @@ class ALUMixin:
         self.f.c = 1 if z > 0xFF else 0
         z &= 0xFF
         self.f.n = 1
+        # CP is a discarded SUB: X/Y sample the operand still on the internal bus,
+        # not the thrown-away result.
         self.f.set_xy(y)
         self._set_sz(z)
         self.f.pv = (((x ^ y) & (x ^ z)) & 0x80) >> 7
@@ -96,6 +98,7 @@ class ALUMixin:
         return z
 
     def _op_alu_r(self, opcode: int) -> int:
+        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,r -- 8-bit ALU with a register or (HL) operand."""
         group = (opcode >> 3) & 0x07
         src = opcode & 0x07
         if src == 6:
@@ -109,6 +112,7 @@ class ALUMixin:
         return t_states
 
     def _op_alu_n(self, opcode: int) -> int:
+        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,n -- 8-bit ALU with an immediate operand."""
         group = {0xC6: 0, 0xCE: 1, 0xD6: 2, 0xDE: 3, 0xE6: 4, 0xEE: 5, 0xF6: 6, 0xFE: 7}[opcode]
         self._alu_a(group, self._read_operand_byte())
         self._update_q(True)
@@ -139,31 +143,39 @@ class ALUMixin:
             self._cp(self.a, value)
 
     def _op_inc_r(self, opcode: int) -> int:
+        """INC r"""
         dest = (opcode >> 3) & 0x07
         self._write_reg(dest, self._inc(self._read_reg(dest)))
         self._update_q(True)
         return 4
 
     def _op_dec_r(self, opcode: int) -> int:
+        """DEC r"""
         dest = (opcode >> 3) & 0x07
         self._write_reg(dest, self._dec(self._read_reg(dest)))
         self._update_q(True)
         return 4
 
     def _op_inc_hl(self) -> int:
+        """INC (HL)"""
         addr = self._hl()
         self.write_byte(addr, self._inc(self.read_byte(addr)))
         self._update_q(True)
         return 11
 
     def _op_dec_hl(self) -> int:
+        """DEC (HL)"""
         addr = self._hl()
         self.write_byte(addr, self._dec(self.read_byte(addr)))
         self._update_q(True)
         return 11
 
     def _op_daa(self) -> int:
+        """DAA -- decimal-adjust A after a BCD ADD/SUB, steered by H, N, and C."""
         original = self.a
+        # DAA: a tens digit above 9, or a carry out of it, means the BCD result
+        # overflowed 99; correct by 0x60 (direction from N) and force C. The
+        # second test does the same for the units digit via H and 0x06.
         if self.f.c or self.a > 0x99:
             self.a = (self.a + (-0x60 if self.f.n else 0x60)) & 0xFF
             self.f.c = 1
@@ -185,7 +197,10 @@ class ALUMixin:
         return 4
 
     def _op_scf_ccf(self, opcode: int, *, prefixed: bool) -> int:
-        """SCF/CCF, including their Q-sensitive undocumented X/Y behavior."""
+        """SCF/CCF -- including their Q-sensitive undocumented X/Y behavior."""
+        # Q holds F only if the previous M1 cycle wrote flags. If it did, F's X/Y
+        # are masked and A alone supplies them; otherwise X/Y = (F | A). A DD/FD
+        # prefix is its own M1 that writes no flags, so a prefixed SCF/CCF sees Q=0.
         if self.q and not prefixed:
             self.f.set_xy(0)
         old_carry = self.f.c
@@ -225,9 +240,11 @@ class ALUMixin:
         return result
 
     def _op_add_hl_rr(self, opcode: int) -> int:
+        """ADD HL,rr -- only H, N, C and X/Y change; S/Z/PV are preserved."""
         pair_index = (opcode >> 4) & 0x03
         hl = self._hl()
         value = self._read_pair(pair_index)
+        # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
         result = hl + value
         self.f.c = 1 if result > 0xFFFF else 0
@@ -240,28 +257,34 @@ class ALUMixin:
         return 11
 
     def _op_adc_hl_rr(self, opcode: int) -> int:
+        """ADC HL,rr"""
         pair_index = (opcode >> 4) & 0x03
         hl = self._hl()
+        # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
         self._write_pair(2, self._add16(hl, self._read_pair(pair_index), self.f.c))
         self._update_q(True)
         return 15
 
     def _op_sbc_hl_rr(self, opcode: int) -> int:
+        """SBC HL,rr"""
         pair_index = (opcode >> 4) & 0x03
         hl = self._hl()
+        # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
         self._write_pair(2, self._sub16(hl, self._read_pair(pair_index), self.f.c))
         self._update_q(True)
         return 15
 
     def _op_inc_rr(self, opcode: int) -> int:
+        """INC rr -- no flags."""
         pair_index = (opcode >> 4) & 0x03
         self._write_pair(pair_index, (self._read_pair(pair_index) + 1) & 0xFFFF)
         self._update_q(False)
         return 6
 
     def _op_dec_rr(self, opcode: int) -> int:
+        """DEC rr -- no flags."""
         pair_index = (opcode >> 4) & 0x03
         self._write_pair(pair_index, (self._read_pair(pair_index) - 1) & 0xFFFF)
         self._update_q(False)

@@ -1,4 +1,4 @@
-"""Unit tests for the Z80 rotate and shift group (src/z80/cpu.py).
+"""Unit tests for the Z80 rotate and shift group (src/z80_python/).
 
 The authoritative check for this group is the per-opcode SingleStepTests/z80
 vector suite run by ``tests/test_z80.py`` (cb 00.json-cb 3f.json plus
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 FLAG_S = 0x80
 FLAG_Z = 0x40

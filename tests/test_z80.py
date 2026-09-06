@@ -41,11 +41,12 @@ try:
     from validation.vector_utils import (
         OpcodeNotImplementedError,
         assert_state_equal,
+        expected_state,
         load_json_vector,
         run_test_case,
     )
 except ImportError:  # pragma: no cover - inline fallback (see module docstring)
-    from z80.cpu import Z80CPU
+    from z80_python import Z80CPU
 
     #: Vector fields that map 1:1 onto Z80CPU attributes (fallback copy).
     REGISTER_FIELDS = (
@@ -150,7 +151,7 @@ except ImportError:  # pragma: no cover - inline fallback (see module docstring)
         """Fallback runner: execute one vector case and snapshot the result."""
         cpu = _setup_cpu(case["initial"])
         try:
-            cpu.decode_and_execute()
+            t_states = cpu.step()
         except NotImplementedError as exc:
             opcode, pc = _fallback_opcode_and_pc(case["initial"])
             location = f" at PC 0x{pc:04X}" if pc is not None else ""
@@ -158,15 +159,28 @@ except ImportError:  # pragma: no cover - inline fallback (see module docstring)
             raise OpcodeNotImplementedError(
                 f"opcode {opcode_text}{location} is not implemented ({exc})"
             ) from exc
-        return _snapshot(cpu, case["final"])
+        state = _snapshot(cpu, case["final"])
+        state["t_states"] = t_states
+        return state
+
+    def expected_state(case: dict) -> dict:
+        """Fallback twin of ``vector_utils.expected_state``: final + T-states."""
+        expected = dict(case["final"])
+        if isinstance(case.get("cycles"), list):
+            expected["t_states"] = len(case["cycles"])
+        return expected
 
     def assert_state_equal(expected: dict, actual: dict) -> None:
-        """Fallback comparator: report register/RAM mismatches as AssertionError."""
+        """Fallback comparator: report register/RAM/T-state mismatches."""
         diffs = [
             f"  register {field}: expected {expected[field]!r}, got {actual.get(field)!r}"
             for field in REGISTER_FIELDS
             if field in expected and expected[field] != actual.get(field)
         ]
+        if "t_states" in expected and expected["t_states"] != actual.get("t_states"):
+            diffs.append(
+                f"  t_states: expected {expected['t_states']}, got {actual.get('t_states')}"
+            )
         expected_ram = expected.get("ram", [])
         actual_ram = dict(actual.get("ram", []))
         for addr, value in expected_ram:
@@ -232,7 +246,7 @@ def test_opcode_vector(
     vector_path: Path | None,
     vector_results: dict[str, dict[str, int | str | None]],
 ) -> None:
-    """Every test case in one opcode file must match initial -> final exactly."""
+    """Every case in one opcode file must match initial -> final and its T-state total."""
     if vector_path is None:
         pytest.skip("run scripts/fetch_test_vectors.py to enable vector tests")
 
@@ -271,7 +285,7 @@ def test_opcode_vector(
                 failures.append(f"  case {name} raised {type(exc).__name__}: {exc}")
                 continue
             try:
-                assert_state_equal(case["final"], actual)
+                assert_state_equal(expected_state(case), actual)
             except AssertionError as exc:
                 failed += 1
                 failures.append(str(exc))

@@ -1,4 +1,4 @@
-"""Unit tests for the Z80 jump/call/return/restart group (src/z80/cpu.py).
+"""Unit tests for the Z80 jump/call/return/restart group (src/z80_python/).
 
 The authoritative check for this group is the per-opcode SingleStepTests/z80
 vector suite run by ``tests/test_z80.py`` (46 vector files, 1000 cases each,
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):

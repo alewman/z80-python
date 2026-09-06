@@ -17,7 +17,7 @@ the PC advances by 3 (the documented 19 T-states of LD r,(IX/IY+d) are
 asserted too).  No parametrization, no vector-file plumbing -- four
 standalone test functions, one per opcode form.
 
-Why this file is red by design: the CPU core (src/z80/cpu.py) dispatches the
+Why this file is red by design: the CPU core (src/z80_python/) dispatches the
 DD/FD index-prefix family through ``_execute_index``, which currently routes
 only sub-opcodes 0x46/0x4E/0x56/0x7E (B/C/D/A) to ``_op_ld_r_index_mem``;
 sub-opcodes 0x5E (E) and 0x66 (H) are not handled there yet, so all four
@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import pytest
 
-from z80.cpu import Z80CPU
+from z80_python import Z80CPU
 
 
 class MemoryCPU(Z80CPU):
