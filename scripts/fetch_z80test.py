@@ -7,9 +7,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-RELEASE_URL = (
-    "https://github.com/raxoft/z80test/releases/download/v1.2a/z80test-1.2a.zip"
-)
+RELEASE_URL = "https://github.com/raxoft/z80test/releases/download/v1.2a/z80test-1.2a.zip"
 SHA256 = "7df0443d703e6b3114ea04b4cdef3e13b91421c62e37185c1036d06864cacbaf"
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "validation" / "z80test_data"
@@ -33,8 +31,24 @@ def main() -> None:
 
     DESTINATION.mkdir(parents=True)
     with zipfile.ZipFile(archive) as zf:
-        zf.extractall(DESTINATION)
+        # The release archive wraps everything in a z80test-1.2a/ directory;
+        # tests/test_z80test_suite.py expects the .tap programs directly under
+        # DESTINATION, so strip that single leading path component.
+        for member in zf.infolist():
+            parts = Path(member.filename).parts
+            if member.is_dir() or len(parts) < 2:
+                continue
+            target = DESTINATION.joinpath(*parts[1:])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(zf.read(member))
     archive.unlink()
+    missing = [
+        name
+        for name in ("z80full.tap", "z80memptr.tap", "z80ccf.tap")
+        if not (DESTINATION / name).is_file()
+    ]
+    if missing:
+        raise RuntimeError(f"z80test archive did not contain expected programs: {missing}")
     print(f"Fetched z80test v1.2a into {DESTINATION}")
 
 
