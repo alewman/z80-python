@@ -10,6 +10,16 @@ This module provides the plumbing to run one such file against the
 * :func:`setup_cpu` -- instantiate a CPU and load an ``initial`` snapshot.
 * :func:`run_test_case` -- execute one instruction and snapshot the result.
 * :func:`assert_state_equal` -- compare two snapshots with readable diffs.
+* :func:`expected_state` -- the vector ``final`` snapshot plus the T-state
+  total encoded by the case's ``cycles`` array, in the shape
+  :func:`run_test_case` returns.
+
+Timing is verified as well as state: every SingleStepTests case carries a
+``cycles`` array with exactly one ``[address, data, pins]`` entry per T-state
+the oracle spent on the instruction.  Its length is therefore the expected
+return value of :meth:`Z80CPU.step` for that case, which pins down
+conditional-branch timing (``JR cc,e`` taken vs. not taken), block-repeat
+timing (``LDIR`` 21 vs. 16), and the extra M1 cost of every prefix.
 
 I/O vectors additionally carry a top-level ``ports`` array (``[addr, value,
 direction]`` entries).  :func:`run_test_case` feeds the ``"r"`` entries into
@@ -40,6 +50,7 @@ __all__ = [
     "OpcodeNotImplementedError",
     "VectorCPU",
     "assert_state_equal",
+    "expected_state",
     "load_json_vector",
     "run_test_case",
     "setup_cpu",
@@ -335,13 +346,18 @@ def run_test_case(case: dict) -> dict:
 
     Sets up the CPU from ``case["initial"]``, feeds the port reads listed in
     the case's top-level ``ports`` array (if any) to the I/O bus, calls
-    ``decode_and_execute()`` exactly once, verifies the port writes the CPU
-    performed against the ``"w"`` entries, and returns a dict in the same
-    shape as the vector ``final`` field: every register from
-    :data:`REGISTER_FIELDS` plus a ``ram`` list of ``[addr, value]`` pairs
-    for the addresses recorded in the case's expected final state (the
-    address set the SingleStepTests generator documents for that
-    instruction).
+    ``step()`` exactly once, verifies the port writes the CPU performed
+    against the ``"w"`` entries, and returns a dict in the same shape as
+    :func:`expected_state`: every register from :data:`REGISTER_FIELDS`, a
+    ``ram`` list of ``[addr, value]`` pairs for the addresses recorded in the
+    case's expected final state (the address set the SingleStepTests
+    generator documents for that instruction), and ``t_states``, the T-state
+    total ``step()`` returned.
+
+    ``step()`` rather than ``decode_and_execute()`` is deliberate: it is the
+    public host entry point, and the vector state never carries a pending
+    RESET/NMI/INT request, so the two are equivalent here except that
+    ``step()`` is the one whose timing a host actually schedules from.
 
     Raises:
         OpcodeNotImplementedError: if ``decode_and_execute`` raises
@@ -364,7 +380,7 @@ def run_test_case(case: dict) -> dict:
     cpu = setup_cpu(case["initial"])
     _load_port_inputs(cpu, case.get("ports", []))
     try:
-        cpu.decode_and_execute()
+        t_states = cpu.step()
     except NotImplementedError as exc:
         opcode, pc = _opcode_and_pc(case["initial"])
         raise OpcodeNotImplementedError(
@@ -373,7 +389,9 @@ def run_test_case(case: dict) -> dict:
             pc=pc,
         ) from exc
     _verify_port_outputs(cpu, case.get("ports", []))
-    return _snapshot_state(cpu, case["final"])
+    state = _snapshot_state(cpu, case["final"])
+    state["t_states"] = t_states
+    return state
 
 
 def _snapshot_state(cpu: VectorCPU, final: dict) -> dict:
@@ -383,6 +401,32 @@ def _snapshot_state(cpu: VectorCPU, final: dict) -> dict:
     }
     state["ram"] = [[addr, cpu.read_byte(addr)] for addr, _ in _ram_pairs(final.get("ram", []))]
     return state
+
+
+def expected_state(case: dict) -> dict:
+    """Return the case's ``final`` snapshot extended with its expected T-states.
+
+    The SingleStepTests ``cycles`` array holds one entry per T-state, so its
+    length is the T-state total ``step()`` must return.  A case without a
+    ``cycles`` array (older or hand-written vectors) yields no ``t_states``
+    key, and :func:`assert_state_equal` then skips the timing comparison for
+    that case rather than inventing an expectation.
+
+    Raises:
+        TypeError/ValueError: if ``case`` or its ``final``/``cycles`` fields
+            are malformed.
+    """
+    if not isinstance(case, dict) or not isinstance(case.get("final"), dict):
+        raise TypeError("case must be a dict with a dict 'final' state")
+    expected = dict(case["final"])
+    cycles = case.get("cycles")
+    if cycles is not None:
+        if not isinstance(cycles, list):
+            raise ValueError(
+                f"'cycles' must be a list of per-T-state entries, got {type(cycles).__name__}"
+            )
+        expected["t_states"] = len(cycles)
+    return expected
 
 
 def _format_value(value: object) -> str:
@@ -397,8 +441,10 @@ def assert_state_equal(expected: dict, actual: dict) -> None:
 
     Compares every register field from :data:`REGISTER_FIELDS` present in
     ``expected`` against ``actual`` (fields without a CPU counterpart such as
-    the generator's ``ei``/``p`` are ignored), and every ``[addr, value]`` RAM
-    pair in ``expected`` against the corresponding address in ``actual``.  RAM
+    the generator's ``ei``/``p`` are ignored), the ``t_states`` total when
+    ``expected`` carries one (see :func:`expected_state`), and every
+    ``[addr, value]`` RAM pair in ``expected`` against the corresponding
+    address in ``actual``.  RAM
     addresses present in ``actual`` but absent from ``expected`` are also
     reported, since the SingleStepTests generator enumerates every relevant
     address per instruction -- an address outside the expected set means the
@@ -423,6 +469,11 @@ def assert_state_equal(expected: dict, actual: dict) -> None:
         for field in REGISTER_FIELDS
         if field in expected and expected[field] != actual.get(field)
     )
+    if "t_states" in expected and expected["t_states"] != actual.get("t_states"):
+        diffs.append(
+            f"  t_states: expected {expected['t_states']}, got {actual.get('t_states')} "
+            "(one SingleStepTests 'cycles' entry per T-state)"
+        )
 
     expected_ram = _ram_pairs(expected.get("ram", []))
     actual_ram = _ram_pairs(actual.get("ram", []))
@@ -541,8 +592,22 @@ def _main() -> None:
         assert_state_equal(case["final"], actual)
         assert actual["pc"] == case["final"]["pc"], actual["pc"]
         assert actual["r"] == case["final"]["r"], actual["r"]
+        assert actual["t_states"] == 4, actual["t_states"]
 
         assert_state_equal(case["final"], case["final"])
+
+        # Timing path: a 4-entry cycles array must match the NOP's 4 T-states,
+        # and a wrong length must be reported by name.
+        timed_case = {**case, "cycles": [[0x0100, 0x00, "r-m-"]] * 4}
+        assert expected_state(timed_case)["t_states"] == 4
+        assert_state_equal(expected_state(timed_case), actual)
+        try:
+            assert_state_equal(expected_state({**case, "cycles": [[0, 0, "----"]] * 5}), actual)
+        except AssertionError as exc:
+            assert "t_states: expected 5, got 4" in str(exc), str(exc)
+        else:
+            raise AssertionError("assert_state_equal should raise on a T-state mismatch")
+        assert "t_states" not in expected_state(case), "no cycles array -> no timing expectation"
 
         broken = dict(case["final"])
         broken["a"] = 0x00

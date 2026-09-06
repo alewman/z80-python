@@ -20,6 +20,14 @@ opcode/prefix variants with 1,000 initial-to-final state transitions each:
 ordering, refresh register `R`, WZ/MEMPTR, Q, alternate registers, and returned
 T-state counts. It is an instruction oracle, not a bus-pin trace.
 
+Every case also carries a `cycles` array with one entry per T-state the oracle
+spent on the instruction. The vector gate compares its length against the value
+`Z80CPU.step()` returns, so the T-state claim below is checked by the same
+1,604,000 cases as the state claim: taken versus not-taken conditional branches,
+21-versus-16 block repeats, and the 4 T-states every DD/FD prefix adds. Earlier
+harness revisions compared registers, RAM, and I/O only; T-states were then
+pinned by per-opcode unit tests alone.
+
 The corpus is external, MIT-licensed, and deliberately not bundled. The pinned
 source is:
 
