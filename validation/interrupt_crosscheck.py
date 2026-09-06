@@ -31,9 +31,9 @@ services immediately after.
 from __future__ import annotations
 
 import ctypes
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 from z80_python.cpu import Z80CPU
 
@@ -84,13 +84,13 @@ class ReferenceHost:
     def state(self) -> dict[str, int]:
         lib = self.lib
         sp = lib.w_get_sp()
-        return dict(
-            pc=lib.w_get_pc(), sp=sp, iff1=lib.w_get_iff1(), iff2=lib.w_get_iff2(),
-            im=lib.w_get_im(), halted=lib.w_get_halted(), r=lib.w_get_r(),
-            i=lib.w_get_i(), a=lib.w_get_a(),
-            stack01=(lib.w_get_mem(sp), lib.w_get_mem(sp + 1)),
-            cyc=lib.w_get_cyc(),
-        )
+        return {
+            "pc": lib.w_get_pc(), "sp": sp, "iff1": lib.w_get_iff1(), "iff2": lib.w_get_iff2(),
+            "im": lib.w_get_im(), "halted": lib.w_get_halted(), "r": lib.w_get_r(),
+            "i": lib.w_get_i(), "a": lib.w_get_a(),
+            "stack01": (lib.w_get_mem(sp), lib.w_get_mem(sp + 1)),
+            "cyc": lib.w_get_cyc(),
+        }
 
 
 class PyHost(Z80CPU):
@@ -119,12 +119,12 @@ class PyHost(Z80CPU):
         pass
 
     def state(self) -> dict[str, int]:
-        return dict(
-            pc=self.pc, sp=self.sp, iff1=self.iff1, iff2=self.iff2, im=self.im,
-            halted=self.halted, r=self.r, i=self.i, a=self.a,
-            stack01=(self.memory[self.sp], self.memory[(self.sp + 1) & 0xFFFF]),
-            cyc=self.total_cyc,
-        )
+        return {
+            "pc": self.pc, "sp": self.sp, "iff1": self.iff1, "iff2": self.iff2, "im": self.im,
+            "halted": self.halted, "r": self.r, "i": self.i, "a": self.a,
+            "stack01": (self.memory[self.sp], self.memory[(self.sp + 1) & 0xFFFF]),
+            "cyc": self.total_cyc,
+        }
 
 
 @dataclass(frozen=True)
@@ -171,15 +171,24 @@ def run_scenario(scenario: Scenario, library_path: Path = _LIBRARY) -> Compariso
         lib.w_set_mem(addr, byte)
         cpu.memory[addr] = byte
 
-    lib.w_set_pc(init["pc"]); cpu.pc = init["pc"]
-    lib.w_set_sp(init["sp"]); cpu.sp = init["sp"]
-    lib.w_set_i(init["i"]); cpu.i = init["i"]
-    lib.w_set_r(init["r"]); cpu.r = init["r"]
-    lib.w_set_iff1(init["iff1"]); cpu.iff1 = init["iff1"]
-    lib.w_set_iff2(init["iff2"]); cpu.iff2 = init["iff2"]
-    lib.w_set_im(init["im"]); cpu.im = init["im"]
-    lib.w_set_halted(init["halted"]); cpu.halted = init["halted"]
-    lib.w_set_a(init["a"]); cpu.a = init["a"]
+    lib.w_set_pc(init["pc"])
+    cpu.pc = init["pc"]
+    lib.w_set_sp(init["sp"])
+    cpu.sp = init["sp"]
+    lib.w_set_i(init["i"])
+    cpu.i = init["i"]
+    lib.w_set_r(init["r"])
+    cpu.r = init["r"]
+    lib.w_set_iff1(init["iff1"])
+    cpu.iff1 = init["iff1"]
+    lib.w_set_iff2(init["iff2"])
+    cpu.iff2 = init["iff2"]
+    lib.w_set_im(init["im"])
+    cpu.im = init["im"]
+    lib.w_set_halted(init["halted"])
+    cpu.halted = init["halted"]
+    lib.w_set_a(init["a"])
+    cpu.a = init["a"]
 
     scenario.python_script(cpu)
     scenario.reference_script(ref)
