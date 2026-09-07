@@ -84,9 +84,9 @@ pipe from a still-running core (`-` for stdin) and a multi-hour ZEX run stops
 at the first bad instruction rather than the end. Exit status is 0 for
 identical, 1 for a divergence, 2 for a malformed manifest or trace.
 
-`examples/conformance/` holds two manifests with their committed reference
-traces: a straight-line flag and branch program, and an interrupt scenario
-with a maskable accept, RETI, an NMI, and RETN.
+`examples/conformance/` holds three manifests with their committed reference
+traces: a straight-line flag and branch program, an interrupt scenario with a
+maskable accept, RETI, an NMI, and RETN, and a program of DD/FD prefix runs.
 
 ## Certification ladder
 

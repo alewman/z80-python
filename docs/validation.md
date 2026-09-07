@@ -109,6 +109,19 @@ On PowerShell, set `$env:Z80_PYTHON_ZEX_DIR` first. The tests use a finite
 10,000,000,000-instruction budget. Run them for release candidates or changes
 to instruction semantics, not ordinary documentation-only edits.
 
+## Prefix runs: documentation-derived, stated as such
+
+Runs of DD/FD prefixes (`DD DD 21 ..`, `FD DD ..`) and DD/FD before ED are
+implemented from Sean Young's *The Undocumented Z80 Documented* v0.91
+(sections 3.7 and 6.1, chapter 5), not from a hardware-captured corpus:
+SingleStepTests has no file for them, z80test does not execute them, and
+ZEXALL does not emit them. The one vector in any published test set is
+FUSE's `ddfd00`, which is emulator-derived; `tests/test_prefix_sequences.py`
+replays it and pins the rest of the rule, and
+`examples/conformance/prefix-sequences.json` carries a reference trace for
+ports. This claim is therefore a tier below the rest of this page, and says
+so here rather than in the code.
+
 ## Hardware-oracle validation (z80test)
 
 SingleStepTests and ZEXALL both validate against corpora ultimately derived
