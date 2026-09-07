@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "im2-vector-table-dispatch",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "00"
+    },
+    {
+      "address": 16400,
+      "data": "0090"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": true,
+    "iff2": true,
+    "im": 2,
+    "i": 64
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "int",
+      "vector": 16
+    }
+  ],
+  "stop": {
+    "max_steps": 2,
+    "on_halt": true
+  }
+}

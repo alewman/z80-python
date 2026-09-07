@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "im1-accept-from-halt",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "76"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": true,
+    "iff2": true,
+    "im": 1,
+    "halted": true
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "int",
+      "vector": 255
+    }
+  ],
+  "stop": {
+    "max_steps": 2,
+    "on_halt": false
+  }
+}

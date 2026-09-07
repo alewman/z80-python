@@ -229,7 +229,24 @@ def test_diff_reports_a_truncated_external_trace() -> None:
 # --- golden fixtures and the command line ---------------------------------------
 
 
-@pytest.mark.parametrize("name", ("flags-and-branches", "interrupts"))
+INTERRUPT_SCENARIOS = (
+    "im1-accept-while-running",
+    "im1-accept-from-halt",
+    "im2-vector-table-dispatch",
+    "im0-device-supplied-rst-10h",
+    "nmi-accept-while-running",
+    "nmi-accept-from-halt",
+    "retn-restores-iff1-from-iff2",
+    "ei-defers-acceptance-one-instruction",
+    "di-masked-request-survives-until-ei",
+    "nmi-priority-over-pending-maskable",
+)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ("flags-and-branches", "interrupts", *(f"interrupts/{s}" for s in INTERRUPT_SCENARIOS)),
+)
 def test_committed_reference_traces_match_a_fresh_run(name: str) -> None:
     """The .jsonl beside each manifest is the reference trace; a change here is a core change."""
     manifest = load_manifest(EXAMPLES / f"{name}.json")
@@ -257,3 +274,26 @@ def test_cli_trace_then_diff(tmp_path: Path) -> None:
 
     out = io.StringIO()
     assert main(["diff", str(tmp_path / "missing.json"), "-"], stdout=out) == 2
+
+
+def test_interrupt_scenario_manifests_cover_the_cross_check() -> None:
+    """One manifest per scenario in validation/interrupt_crosscheck.py, each ending on its event."""
+    kinds = {}
+    for scenario in INTERRUPT_SCENARIOS:
+        manifest = load_manifest(EXAMPLES / "interrupts" / f"{scenario}.json")
+        assert manifest.events, scenario
+        kinds[scenario] = tuple(record.kind for record in trace_manifest(manifest))
+    lifecycle = {BoundaryKind.MASKABLE_INTERRUPT, BoundaryKind.NON_MASKABLE_INTERRUPT}
+    for scenario, observed in kinds.items():
+        assert observed[-1] in lifecycle or scenario == "retn-restores-iff1-from-iff2", scenario
+    assert kinds["retn-restores-iff1-from-iff2"] == (
+        BoundaryKind.INSTRUCTION,
+        BoundaryKind.NON_MASKABLE_INTERRUPT,
+        BoundaryKind.INSTRUCTION,
+    )
+    assert kinds["im1-accept-from-halt"][0] is BoundaryKind.HALT_IDLE
+    assert kinds["ei-defers-acceptance-one-instruction"] == (
+        BoundaryKind.INSTRUCTION,
+        BoundaryKind.INSTRUCTION,
+        BoundaryKind.MASKABLE_INTERRUPT,
+    )

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "name": "nmi-accept-while-running",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "00"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": true,
+    "iff2": true,
+    "im": 1
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "nmi"
+    }
+  ],
+  "stop": {
+    "max_steps": 2,
+    "on_halt": true
+  }
+}
