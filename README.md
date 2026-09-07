@@ -219,7 +219,7 @@ See [CPU state](docs/cpu-state.md), [disassembly](docs/disassembly.md), and
 A manifest pins a machine (memory, initial state, host profile, interrupt
 events, stop rule); the reference core produces a trace for it, and a core in
 any language can be diffed against that trace after every instruction, with
-T-states and all 29 processor-state fields compared:
+T-states and all 28 processor-state fields compared:
 
 ```text
 python -m z80_python.conformance trace examples/conformance/interrupts.json --out ref.jsonl
