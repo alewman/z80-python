@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "flags-and-branches",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "3e7f3c3e80c6803e0f060180d61028023eff3c3d3dfeff30010037af3f76"
+    }
+  ],
+  "initial": {
+    "pc": 0,
+    "sp": 65535
+  },
+  "stop": {
+    "max_steps": 100,
+    "on_halt": true
+  }
+}
