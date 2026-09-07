@@ -9,6 +9,7 @@ from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import (
     TRACE_SCHEMA_VERSION,
     BoundaryKind,
+    CPUState,
     DebugSession,
     StepRecord,
     TraceDifference,
@@ -219,3 +220,68 @@ def test_read_trace_reports_the_malformed_line_number_lazily() -> None:
     assert next(records) == record
     with pytest.raises(ValueError, match="line 2"):
         next(records)
+
+
+# --- external producers -----------------------------------------------------
+
+
+def _external_record(address: int, data: bytes, **overrides: object) -> dict[str, object]:
+    """A record the way a port in another language would write it: no disassembly text."""
+    state = dict.fromkeys(_STATE_FIELDS, 0)
+    state.update(
+        {
+            "iff1": False,
+            "iff2": False,
+            "halted": False,
+            "reset_pending": False,
+            "non_maskable_interrupt_pending": False,
+            "maskable_interrupt_vector": None,
+        }
+    )
+    after = {**state, "pc": (address + len(data)) & 0xFFFF, "r": 1}
+    record = {
+        "version": TRACE_SCHEMA_VERSION,
+        "sequence": 0,
+        "kind": "instruction",
+        "t_states": 4,
+        "instruction": {"address": address, "data": data.hex()},
+        "before": {**state, "pc": address},
+        "after": after,
+    }
+    record.update(overrides)
+    return record
+
+
+_STATE_FIELDS = [field.name for field in fields(CPUState)]
+
+
+def test_external_record_without_disassembly_text_is_decoded_from_bytes() -> None:
+    record = step_record_from_dict(_external_record(0x1234, bytes((0xDD, 0x09))))
+    assert record.instruction is not None
+    assert record.instruction.mnemonic == "ADD"
+    assert record.instruction.operands == ("IX", "BC")
+    assert record.instruction.address == 0x1234
+
+
+def test_external_record_compares_equal_to_native_record_for_same_bytes() -> None:
+    external = step_record_from_dict(_external_record(0x0000, bytes((0x00,))))
+    native = step_record_from_dict(step_record_to_dict(external))
+    assert step_record_to_dict(native)["instruction"]["mnemonic"] == "NOP"
+    assert compare_step_records(native, external) == ()
+
+
+def test_external_record_rejects_partial_text_and_undecodable_bytes() -> None:
+    partial = _external_record(0, bytes((0x00,)))
+    partial["instruction"]["mnemonic"] = "NOP"  # operands missing
+    with pytest.raises(ValueError, match="instruction fields"):
+        step_record_from_dict(partial)
+    with pytest.raises(ValueError, match="exactly one instruction"):
+        step_record_from_dict(_external_record(0, bytes((0x00, 0x00))))
+
+
+def test_differing_bytes_report_data_and_derived_text() -> None:
+    left = step_record_from_dict(_external_record(0, bytes((0x00,))))
+    right = step_record_from_dict(_external_record(0, bytes((0x3C,))))
+    differences = {item.path: (item.left, item.right) for item in compare_step_records(left, right)}
+    assert differences["instruction.data"] == ("00", "3c")
+    assert differences["instruction.mnemonic"] == ("NOP", "INC")
