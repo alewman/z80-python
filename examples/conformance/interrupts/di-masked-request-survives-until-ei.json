@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "di-masked-request-survives-until-ei",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "00fb0000"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": false,
+    "iff2": false,
+    "im": 1
+  },
+  "events": [
+    {
+      "at_step": 0,
+      "kind": "int",
+      "vector": 255
+    }
+  ],
+  "stop": {
+    "max_steps": 4,
+    "on_halt": true
+  }
+}

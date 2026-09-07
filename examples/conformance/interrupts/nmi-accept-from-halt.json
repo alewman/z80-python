@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "nmi-accept-from-halt",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "76"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": false,
+    "iff2": false,
+    "im": 1,
+    "halted": true
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "nmi"
+    }
+  ],
+  "stop": {
+    "max_steps": 2,
+    "on_halt": false
+  }
+}

@@ -83,7 +83,7 @@ Integers are unsigned; booleans are JSON `true`/`false`.
 | `maskable_interrupt_vector` | 0..255 or `null` | Pending maskable request and its bus byte; `null` when none. |
 | `non_maskable_interrupt_pending` | boolean | Latched NMI request. |
 
-These are the 29 fields of `CPUState` and are the definition of "processor
+These are the 28 fields of `CPUState` and are the definition of "processor
 state" for equivalence purposes. Memory, ports, and devices are host state and
 are not in the trace; equality of traces implies equality of every memory and
 port access the CPU made only when both cores ran the same host, which is what

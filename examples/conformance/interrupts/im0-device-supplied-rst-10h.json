@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "im0-device-supplied-rst-10h",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "00"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": true,
+    "iff2": true,
+    "im": 0
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "int",
+      "vector": 215
+    }
+  ],
+  "stop": {
+    "max_steps": 2,
+    "on_halt": true
+  }
+}
