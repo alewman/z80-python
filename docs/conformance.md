@@ -13,7 +13,7 @@ At every processor boundary, all of:
 - the boundary **kind** (instruction, halt idle, reset, NMI, maskable);
 - the **T-state** total the boundary consumed;
 - the instruction's **address and bytes**, when it is an instruction;
-- all **29 fields of `CPUState`** before and after, including `wz`, `q`, `r`,
+- all **28 fields of `CPUState`** before and after, including `wz`, `q`, `r`,
   `ei_delay`, both flip-flops, the halt flag, and the pending-request fields.
 
 Nothing less. A core that matches registers but not `wz`, or matches state but
@@ -86,7 +86,10 @@ identical, 1 for a divergence, 2 for a malformed manifest or trace.
 
 `examples/conformance/` holds two manifests with their committed reference
 traces: a straight-line flag and branch program, and an interrupt scenario
-with a maskable accept, RETI, an NMI, and RETN.
+with a maskable accept, RETI, an NMI, and RETN. `examples/conformance/interrupts/`
+holds the ten scenarios of `validation/interrupt_crosscheck.py` as manifests
+with `events`, each with its reference trace; they are rung 5 of the ladder
+below.
 
 ## Certification ladder
 
@@ -99,7 +102,7 @@ claim.
 | 2 | SingleStepTests, all 1,604 files, comparing registers, RAM, port order, and T-states (`len(cycles)`). Native runner in your language; `validation/vector_utils.py` is the reference runner and the shape is documented in [start-here.md](start-here.md). | Instruction semantics, undocumented flags, WZ, Q, R, and timing match the corpus. |
 | 3 | ZEXDOC and ZEXALL diffed against the reference with a `cpm-minimal` manifest. | Equivalent to `z80-python` over hundreds of millions of instructions. |
 | 4 | raxoft/z80test natively (see `validation/z80test_runner.py` for the two ROM stubs). | Flags verified against real Zilog NMOS silicon. |
-| 5 | The interrupt scenarios in `validation/interrupt_crosscheck.py` as manifests with events. | Lifecycle sequencing equivalent to the reference. |
+| 5 | The interrupt scenarios in `validation/interrupt_crosscheck.py` as manifests with events, shipped in `examples/conformance/interrupts/`. | Lifecycle sequencing equivalent to the reference. |
 
 State the exact `z80-python` version, trace schema version, SingleStepTests
 revision, and z80test release you certified against. A claim without those

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "retn-restores-iff1-from-iff2",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "00"
+    },
+    {
+      "address": 102,
+      "data": "ed45"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": true,
+    "iff2": true,
+    "im": 1
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "nmi"
+    }
+  ],
+  "stop": {
+    "max_steps": 3,
+    "on_halt": true
+  }
+}
