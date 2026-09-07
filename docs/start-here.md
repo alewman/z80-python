@@ -95,6 +95,7 @@ instruction that writes no flags (so Q reads as 0 afterwards).
 | ED | 16-bit loads and arithmetic, block instructions, `IN r,(C)`, `OUT (C),r`, `NEG`, `IM`, `RETN`/`RETI`, `LD A,I` and friends | Any ED byte without a definition is a real 8-T-state NOP |
 | DD / FD | IX / IY | Take the unprefixed instruction and substitute: HL becomes IX (or IY), `(HL)` becomes `(IX+d)` with a signed displacement byte, and H/L become IXH/IXL, except inside a `(IX+d)` form. Opcodes that do not mention HL, H, or L run unchanged, plus the 4 T-states and the R increment |
 | DD CB / FD CB | Indexed rotates and bit ops | Byte order is `DD CB d op`; the displacement comes before the final opcode. R advances by 2, not 4, because the last byte is read as an operand. The undocumented forms with z != 6 also copy the result into `r[z]` |
+| DD DD, DD FD, DD ED and the FD forms | Prefix runs | A DD or FD is a flag for the next opcode, not an instruction, so a run of them is legal: each stray one costs 4 T-states and increments R, the last one decides IX or IY, and an ED after any of them starts an ED instruction the flag cannot touch. The run and its opcode are one instruction boundary; no interrupt is accepted inside it |
 
 `_dispatch.py` and `_index_dispatch.py` are those tables written as if-chains.
 The explicit shape is deliberate: it is what PyPy compiles well, and every

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "prefix-sequences",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "fddd00210010dddd213412ddfd2178563e01dded44fded5fddddcb054676"
+    }
+  ],
+  "initial": {
+    "pc": 0,
+    "sp": 65535
+  },
+  "stop": {
+    "max_steps": 32,
+    "on_halt": true
+  }
+}
