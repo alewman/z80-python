@@ -7,7 +7,7 @@ from itertools import zip_longest
 from typing import TextIO
 
 from z80_python.debug import DebugSession, StepRecord
-from z80_python.disasm import Instruction
+from z80_python.disasm import Instruction, disassemble_bytes
 from z80_python.state import CPUState
 
 TraceValue = int | bool | str | tuple[str, ...] | None
@@ -284,24 +284,52 @@ def _state_from_dict(value: object, name: str) -> CPUState:
         raise ValueError(f"invalid {name} CPU state: {exc}") from exc
 
 
+_INSTRUCTION_REQUIRED = {"address", "data"}
+_INSTRUCTION_TEXT = {"mnemonic", "operands"}
+
+
 def _instruction_from_dict(value: object) -> Instruction | None:
+    """Decode a record's instruction; derive its text from the bytes if omitted.
+
+    A trace written by this package carries ``mnemonic`` and ``operands``. An
+    external producer (a core in another language) may omit both, supplying only
+    ``address`` and ``data``; the text is then reconstructed with this package's
+    own disassembler, so a port never has to reproduce its formatting.
+    """
+
     if value is None:
         return None
     encoded = _require_object(value, "instruction")
-    _require_keys(encoded, "instruction", {"address", "data", "mnemonic", "operands"})
+    keys = set(encoded)
+    if keys != _INSTRUCTION_REQUIRED and keys != _INSTRUCTION_REQUIRED | _INSTRUCTION_TEXT:
+        _require_keys(encoded, "instruction", _INSTRUCTION_REQUIRED | _INSTRUCTION_TEXT)
     data = encoded["data"]
-    operands = encoded["operands"]
     if type(data) is not str:
         raise ValueError("instruction.data must be a hexadecimal string")
-    if type(operands) is not list or not all(type(operand) is str for operand in operands):
-        raise ValueError("instruction.operands must be a list of strings")
     try:
         instruction_data = bytes.fromhex(data)
     except ValueError as exc:
         raise ValueError("instruction.data must be a hexadecimal string") from exc
+    address = encoded["address"]
+    if "mnemonic" not in encoded:
+        if type(address) is not int or not 0 <= address <= 0xFFFF:
+            raise ValueError("instruction.address must be an integer in range 0x0000..0xFFFF")
+        try:
+            derived = disassemble_bytes(instruction_data, address)
+        except (NotImplementedError, ValueError) as exc:
+            raise ValueError(f"instruction.data is not a decodable encoding: {exc}") from exc
+        if derived.data != instruction_data:
+            raise ValueError(
+                f"instruction.data {data!r} is not exactly one instruction "
+                f"(decoded {derived.data.hex()!r})"
+            )
+        return derived
+    operands = encoded["operands"]
+    if type(operands) is not list or not all(type(operand) is str for operand in operands):
+        raise ValueError("instruction.operands must be a list of strings")
     try:
         return Instruction(
-            address=encoded["address"],
+            address=address,
             data=instruction_data,
             mnemonic=encoded["mnemonic"],
             operands=tuple(operands),
