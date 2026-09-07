@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "name": "interrupts",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "31fffffb0000000000000076"
+    },
+    {
+      "address": 56,
+      "data": "3c0480ed4d"
+    },
+    {
+      "address": 102,
+      "data": "0480ed45"
+    }
+  ],
+  "initial": {
+    "pc": 0
+  },
+  "events": [
+    {
+      "at_step": 2,
+      "kind": "int",
+      "vector": 255
+    },
+    {
+      "at_step": 8,
+      "kind": "nmi"
+    }
+  ],
+  "stop": {
+    "max_steps": 64,
+    "on_halt": true
+  }
+}

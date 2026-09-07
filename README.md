@@ -214,6 +214,22 @@ These APIs make the project useful as:
 See [CPU state](docs/cpu-state.md), [disassembly](docs/disassembly.md), and
 [undocumented behavior](docs/undocumented-behavior.md).
 
+## Conformance for ports in other languages
+
+A manifest pins a machine (memory, initial state, host profile, interrupt
+events, stop rule); the reference core produces a trace for it, and a core in
+any language can be diffed against that trace after every instruction, with
+T-states and all 29 processor-state fields compared:
+
+```text
+python -m z80_python.conformance trace examples/conformance/interrupts.json --out ref.jsonl
+python -m z80_python.conformance diff  examples/conformance/interrupts.json yours.jsonl
+```
+
+See [conformance](docs/conformance.md) for the host contract and the
+certification ladder, and [the trace schema](docs/trace-schema.md) for the
+record format.
+
 ## Advanced diagnostics and tooling
 
 The following development-tree features support emulator diagnosis but are
@@ -266,6 +282,7 @@ reproduction instructions and finite execution budgets are documented in
 
 ## Project records
 
+- [0.4.0 release notes (in development)](docs/releases/0.4.0.md)
 - [0.3.0 release notes](docs/releases/0.3.0.md)
 - [Validation evidence and scope](docs/validation.md)
 - [Public API stability](docs/api-stability.md)
@@ -276,6 +293,8 @@ reproduction instructions and finite execution budgets are documented in
 - [Disassembly](docs/disassembly.md)
 - [Debug sessions](docs/debug-session.md)
 - [Trace comparison](docs/trace-comparison.md)
+- [Conformance for other cores](docs/conformance.md)
+- [Trace schema](docs/trace-schema.md)
 - [Start here: Z80 primer](docs/start-here.md)
 - [Undocumented behavior](docs/undocumented-behavior.md)
 - [Debugging and agent-tooling roadmap](docs/debugging-roadmap.md)
