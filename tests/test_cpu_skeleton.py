@@ -111,14 +111,14 @@ def test_read_write_byte_through_memory_bus() -> None:
     assert cpu.memory[0x1234] == 0xAB
 
 
-def test_decode_and_execute_fetches_index_prefix_and_raises_for_unknown_subopcode() -> None:
+def test_decode_and_execute_treats_an_index_prefix_before_ed_as_a_stray() -> None:
     cpu = MemoryCPU()
     cpu.pc = 0x1234
     cpu.write_byte(0x1234, 0xDD)
-    cpu.write_byte(0x1235, 0xED)  # DD ED remains unimplemented.
-    with pytest.raises(NotImplementedError):
-        cpu.decode_and_execute()
-    assert cpu.pc == 0x1235
+    cpu.write_byte(0x1235, 0xED)  # DD before ED: the DD is a 4-T-state stray M1.
+    cpu.write_byte(0x1236, 0x77)  # ED 77 is an 8-T-state ED NOP.
+    assert cpu.decode_and_execute() == 12
+    assert (cpu.pc, cpu.r) == (0x1237, 3)
 
 
 def test_halt_sets_halted_flag_and_leaves_state_untouched() -> None:

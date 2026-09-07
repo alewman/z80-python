@@ -339,9 +339,17 @@ def _decode_index_cb(cursor: _Cursor, start: int, index: str) -> Instruction:
 
 
 def _decode_index(cursor: _Cursor, start: int, prefix: int) -> Instruction:
+    opcode = cursor.read()
+    while opcode in (0xDD, 0xFD):
+        # A run of DD/FD prefixes is one instruction whose last prefix counts
+        # (Young 3.7); the stray bytes belong to the instruction's encoding.
+        prefix = opcode
+        opcode = cursor.read()
+    if opcode == 0xED:
+        # ED instructions ignore the index prefix, so DD ED xx is ED xx.
+        return _decode_ed(cursor, start)
     index = "IX" if prefix == 0xDD else "IY"
     high, low = f"{index}H", f"{index}L"
-    opcode = cursor.read()
     y = (opcode >> 3) & 7
     z = opcode & 7
 

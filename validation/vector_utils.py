@@ -556,10 +556,19 @@ def _main() -> None:
         assert cpu.f.byte == 0xFA, hex(cpu.f.byte)
         assert cpu.read_byte(0x0100) == 0x00, hex(cpu.read_byte(0x0100))
 
+        # Error path: this core implements every opcode, so stage the condition
+        # a port's unfinished core would produce, a decode that raises
+        # NotImplementedError, and check it surfaces as the named exception.
         unsupported_case = {
             "initial": {**case["initial"], "ram": [[0x0100, 0xDD], [0x0101, 0xED]]},
             "final": case["final"],
         }
+
+        def unfinished_decode(self: VectorCPU) -> int:
+            raise NotImplementedError(f"unhandled opcode 0xDD at PC 0x{self.pc:04X}")
+
+        real_decode = VectorCPU.decode_and_execute
+        VectorCPU.decode_and_execute = unfinished_decode  # type: ignore[method-assign]
         try:
             run_test_case(unsupported_case)
         except OpcodeNotImplementedError as exc:
@@ -571,6 +580,8 @@ def _main() -> None:
             raise AssertionError(
                 "run_test_case should raise OpcodeNotImplementedError for an unsupported opcode"
             )
+        finally:
+            VectorCPU.decode_and_execute = real_decode  # type: ignore[method-assign]
 
         # Happy path: temporarily substitute a NOP implementation for the
         # skeleton's decode_and_execute and confirm run_test_case reproduces

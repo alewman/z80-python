@@ -102,6 +102,40 @@ bytes. So an unprefixed instruction adds 1, `ED xx` and `DD xx` add 2, and
 operand (`_index_dispatch.py`). A `HALT`ed CPU keeps fetching and adds 1 per
 idle step. Interrupt and NMI acceptance add 1.
 
+### Prefix runs: DD and FD are flags, not instructions
+
+A DD or FD byte does not execute anything. It sets a flag that says "use IX
+(or IY) instead of HL" for the opcode that follows, and the flag is reset by
+whatever byte comes next. Three consequences, all in `_index_dispatch.py`,
+`_execute_index`:
+
+- **A run of DD/FD bytes is one instruction.** Each stray prefix is its own
+  M1 cycle, so it costs 4 T-states and increments R, and does nothing else;
+  the last prefix in the run decides the register. `FD DD 21 00 10` is
+  `LD IX,1000h` in 18 T-states with R advanced by 3.
+- **DD/FD before ED is a stray.** ED opens an instruction set that never uses
+  the substitution, so `DD ED 44` is `NEG` in 12 T-states with R advanced by
+  3. (`DD CB` is different: it opens its own table, section above.)
+- **No interrupt is accepted inside the run.** Hardware samples INT only at
+  the end of an instruction, and the flag would be lost if it accepted one
+  after a prefix; a run of DDs holds interrupts off exactly as a run of EIs
+  does. This core gets that for free, because the run is one `step()`.
+
+The disassembler (`disasm.py`, `_decode_index`) follows the same rule, so an
+instruction's bytes in a trace include its stray prefixes.
+
+This is the one rule on this page with no hardware-captured vector behind it.
+The SingleStepTests corpus has no file for these sequences and z80test does
+not execute them. The rule is Sean Young's, *The Undocumented Z80 Documented*
+v0.91, section 3.7 ("In a large sequence of DD and FD bytes, it is the last
+one that counts. Also any other byte (or instruction) resets this flag"),
+section 6.1 ("Just a stray DD or FD increases the R by one"), and chapter 5
+(no interrupts during a run). The only vector any test set holds is FUSE's
+`ddfd00` (DD FD 00 00 costs 16 T-states over two instructions and leaves R at
+4), which is emulator-derived and which `tests/test_prefix_sequences.py`
+replays. Real software does emit these sequences, which is why the rule is
+implemented rather than left as an error.
+
 ### Other undocumented instructions the core implements
 
 - IXH/IXL/IYH/IYL as 8-bit registers in every DD/FD form that names H or L
@@ -125,6 +159,16 @@ oracles, in this order of authority:
 2. raxoft/z80test checks flags, including `SCF`/`CCF`, against a real Zilog
    NMOS Z80.
 3. ZEXALL checks the same X/Y behavior across long sequences.
+
+Sources cited on this page and in the handlers' comments:
+
+- Sean Young, *The Undocumented Z80 Documented*, version 0.91, 18 September
+  2005 (GNU FDL): <http://www.z80.info/zip/z80-documented.pdf>. Section 4.3
+  for the block I/O flags, 3.7 and 6.1 for prefix runs, chapter 5 for
+  interrupts.
+- FUSE, the Free Unix Spectrum Emulator, `z80/tests/tests.in` and
+  `tests.expected` (GPL-2.0): 1,242 emulator-derived cases, of which
+  `ddfd00` is the one prefix-run vector.
 
 If you need a rule that is not here, look at the comment on the handler first;
 the generator inside the fetched corpus

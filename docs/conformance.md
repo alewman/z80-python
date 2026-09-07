@@ -84,12 +84,12 @@ pipe from a still-running core (`-` for stdin) and a multi-hour ZEX run stops
 at the first bad instruction rather than the end. Exit status is 0 for
 identical, 1 for a divergence, 2 for a malformed manifest or trace.
 
-`examples/conformance/` holds two manifests with their committed reference
-traces: a straight-line flag and branch program, and an interrupt scenario
-with a maskable accept, RETI, an NMI, and RETN. `examples/conformance/interrupts/`
-holds the ten scenarios of `validation/interrupt_crosscheck.py` as manifests
-with `events`, each with its reference trace; they are rung 5 of the ladder
-below.
+`examples/conformance/` holds three manifests with their committed reference
+traces: a straight-line flag and branch program, an interrupt scenario with a
+maskable accept, RETI, an NMI, and RETN, and a program of DD/FD prefix runs.
+`examples/conformance/interrupts/` holds the ten scenarios of
+`validation/interrupt_crosscheck.py` as manifests with `events`, each with its
+reference trace; they are rung 5 of the ladder below.
 
 ## Certification ladder
 
@@ -98,7 +98,7 @@ claim.
 
 | Step | What | What you may then say |
 | --- | --- | --- |
-| 1 | Both example manifests diff clean. | Your trace producer and host model are right. |
+| 1 | All example manifests diff clean. | Your trace producer and host model are right. |
 | 2 | SingleStepTests, all 1,604 files, comparing registers, RAM, port order, and T-states (`len(cycles)`). Native runner in your language; `validation/vector_utils.py` is the reference runner and the shape is documented in [start-here.md](start-here.md). | Instruction semantics, undocumented flags, WZ, Q, R, and timing match the corpus. |
 | 3 | ZEXDOC and ZEXALL diffed against the reference with a `cpm-minimal` manifest. | Equivalent to `z80-python` over hundreds of millions of instructions. |
 | 4 | raxoft/z80test natively (see `validation/z80test_runner.py` for the two ROM stubs). | Flags verified against real Zilog NMOS silicon. |
