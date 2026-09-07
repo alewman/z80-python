@@ -11,6 +11,8 @@ The supported surface includes:
 - `CPUState` capture and restoration;
 - `Instruction` and disassembly functions;
 - `DebugSession`, its protocols, enums, and immutable result values;
+- `z80_python.conformance`: `Manifest` and its parts, `ConformanceHost`,
+  `trace_manifest`, `diff_manifest`, the manifest JSON form, and the command line;
 - `CommandDebugger` and command result/error values; and
 - trace comparison values and functions.
 
