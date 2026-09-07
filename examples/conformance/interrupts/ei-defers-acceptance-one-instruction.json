@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "ei-defers-acceptance-one-instruction",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "fb0000"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": false,
+    "iff2": false,
+    "im": 1
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "int",
+      "vector": 255
+    }
+  ],
+  "stop": {
+    "max_steps": 3,
+    "on_halt": true
+  }
+}
