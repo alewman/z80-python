@@ -143,8 +143,16 @@ def test_setup_cpu_rejects_non_dict() -> None:
 
 
 def test_run_test_case_raises_custom_exception_for_unimplemented_opcode(
-    real_case: dict,
+    monkeypatch: pytest.MonkeyPatch, real_case: dict
 ) -> None:
+    """This core implements every opcode, so the condition is staged: a port's
+    unfinished core raising ``NotImplementedError`` must surface as the named
+    exception carrying the opcode and PC read from the vector."""
+
+    def unfinished_decode(self: VectorCPU) -> int:
+        raise NotImplementedError(f"unhandled opcode 0xDD at PC 0x{self.pc:04X}")
+
+    monkeypatch.setattr(VectorCPU, "decode_and_execute", unfinished_decode)
     unsupported_case = {
         "initial": {
             **real_case["initial"],

@@ -5,6 +5,13 @@ bumps R before the opcode after it is fetched. Base-set opcodes that the prefix
 does not modify therefore run their ordinary handler and add that 4 here; the
 handlers that take a ``prefix`` argument already include the prefix cost in
 their documented totals.
+
+A DD or FD is not an instruction but a flag saying "use IX (or IY) instead of
+HL" for the opcode that follows. That is why a run of them is legal: each one
+is a stray M1 that costs 4 T-states and bumps R, the last one decides the
+register, and an ED after any of them starts an ED instruction that the flag
+cannot touch. Sean Young, *The Undocumented Z80 Documented* v0.91, sections
+3.7 and 6.1; FUSE's ``ddfd00`` test case encodes the same costs.
 """
 
 
@@ -12,6 +19,24 @@ class IndexDispatchMixin:
     """Private dispatcher for currently implemented DD/FD opcodes."""
 
     def _execute_index(self, prefix: int, sub_opcode: int) -> int:
+        stray_t_states = 0
+        while sub_opcode in (0xDD, 0xFD):
+            # A DD or FD before another DD or FD is a stray prefix: its own M1
+            # (4 T-states, R+1, already counted by _fetch_byte) and nothing else.
+            # "In a large sequence of DD and FD bytes, it is the last one that
+            # counts" (Young 3.7). No interrupt is accepted inside the run,
+            # because the run is one instruction to step() (Young, chapter 5).
+            prefix = sub_opcode
+            sub_opcode = self._fetch_byte()
+            stray_t_states += 4
+        if sub_opcode == 0xED:
+            # "If CB or ED is encountered, that byte plus the next make up an
+            # instruction" (Young 3.7), and ED instructions never use the IX/IY
+            # substitution (Young 3.2), so the DD/FD is a 4-T-state stray.
+            return stray_t_states + 4 + self._execute_ed(self._fetch_byte())
+        return stray_t_states + self._execute_index_opcode(prefix, sub_opcode)
+
+    def _execute_index_opcode(self, prefix: int, sub_opcode: int) -> int:
         if sub_opcode == 0xCB:
             displacement = self._read_operand_byte()
             # The final DDCB opcode byte is read as an operand, not an M1 fetch, so R
@@ -265,8 +290,8 @@ class IndexDispatchMixin:
         if sub_opcode == 0xC5:
             return self._op_push_rr(sub_opcode) + 4
 
-        prefix_addr = (self.pc - 2) & 0xFFFF
-        self.pc = (prefix_addr + 1) & 0xFFFF
+        # Every byte after a DD/FD is handled above or by _execute_index (DD,
+        # FD, ED); this guard only documents that the table is complete.
         raise NotImplementedError(
-            f"unhandled DD/FD opcode 0x{sub_opcode:02X} at PC 0x{prefix_addr:04X}"
+            f"unhandled DD/FD opcode 0x{sub_opcode:02X} at PC 0x{(self.pc - 2) & 0xFFFF:04X}"
         )

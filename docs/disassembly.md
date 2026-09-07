@@ -13,7 +13,9 @@ Both functions return an immutable `Instruction` with:
 - canonical human-readable `text`.
 
 The decoder covers every base, CB, ED, DD, FD, DDCB, and FDCB form supported by
-this instruction core, including undocumented index-byte and indexed copy forms.
+this instruction core, including undocumented index-byte and indexed copy forms,
+and it treats a run of DD/FD prefixes (and DD/FD before ED) as one instruction
+whose bytes include the stray prefixes, exactly as the core executes it.
 Unsupported encodings raise `NotImplementedError`, matching the execution core's
 deliberately bounded opcode surface.
 

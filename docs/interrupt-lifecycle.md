@@ -87,7 +87,10 @@ silently pretending that arbitrary injected opcodes have correct bus semantics.
 
 `EI` delays acceptance until one following instruction has completed; `DI` cancels
 that delay and masks a pending request. A halted CPU performs 4-T-state idle steps
-until an accepted maskable interrupt wakes it.
+until an accepted maskable interrupt wakes it. A run of DD/FD prefixes and the
+opcode that ends it is one `step()`, so a request is accepted after the run and
+never inside it, matching hardware (Young, *The Undocumented Z80 Documented*,
+chapter 5: a long sequence of DDs holds interrupts off like a sequence of EIs).
 
 ## Scope
 
