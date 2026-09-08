@@ -14,6 +14,9 @@ Two entry points, also exposed as ``python -m z80_python.conformance``:
   :class:`StepRecord` per boundary, the reference trace.
 * :func:`diff_manifest` runs the same manifest in lockstep against an external
   trace and returns the first :class:`TraceDivergence`, or ``None``.
+* :func:`write_checkpoints` runs the manifest without records and writes a
+  manifest that resumes it every N boundaries, so a run of billions of
+  records can be diffed as independent segments in parallel.
 
 The module depends only on the standard library and the rest of this package.
 """
@@ -47,6 +50,7 @@ __all__ = [
     "manifest_from_dict",
     "manifest_to_dict",
     "trace_manifest",
+    "write_checkpoints",
 ]
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -240,6 +244,49 @@ class TraceRun:
     output: bytes
 
 
+class _Stop:
+    """Why :func:`_boundaries` stopped; filled in when the generator ends."""
+
+    reason = "max_steps"
+
+
+def _boundaries(manifest: Manifest, host: ConformanceHost, stopped: _Stop) -> Iterator[int]:
+    """Yield the index of every boundary the run executes, in order.
+
+    Before each index the events due at it are applied and the stop checks
+    run in the reference order: pending events, cpm traps, ``at_pc``,
+    ``on_halt``, then the step budget. The caller performs the boundary
+    itself (a recorded ``session.step()`` or a bare ``host.step()``), so the
+    traced run and the checkpoint run cannot drift apart.
+    """
+
+    events = list(manifest.events)
+    stop = manifest.stop
+    steps = 0
+    while steps < stop.max_steps:
+        while events and events[0].at_step == steps:
+            _apply_event(host, events.pop(0))
+        if manifest.host == "cpm-minimal" and host.handle_cpm_trap():
+            stopped.reason = "cpm_exit"
+            return
+        if host.pc in stop.at_pc:
+            stopped.reason = "at_pc"
+            return
+        if (
+            stop.on_halt
+            and host.halted
+            and not events
+            and not host.reset_pending
+            and not host.non_maskable_interrupt_pending
+            and not host.maskable_interrupt_pending
+        ):
+            stopped.reason = "halted"
+            return
+        yield steps
+        steps += 1
+    stopped.reason = "max_steps"
+
+
 def trace_manifest(
     manifest: Manifest, *, result: list[TraceRun] | None = None
 ) -> Iterator[StepRecord]:
@@ -252,33 +299,81 @@ def trace_manifest(
 
     host = ConformanceHost(manifest)
     session = DebugSession(host, peek_byte=host.peek_byte, history_limit=0)
-    events = list(manifest.events)
-    stop = manifest.stop
-    reason = "max_steps"
+    stopped = _Stop()
     steps = 0
-    while steps < stop.max_steps:
-        while events and events[0].at_step == steps:
-            _apply_event(host, events.pop(0))
-        if manifest.host == "cpm-minimal" and host.handle_cpm_trap():
-            reason = "cpm_exit"
-            break
-        if host.pc in stop.at_pc:
-            reason = "at_pc"
-            break
-        if (
-            stop.on_halt
-            and host.halted
-            and not events
-            and not host.reset_pending
-            and not host.non_maskable_interrupt_pending
-            and not host.maskable_interrupt_pending
-        ):
-            reason = "halted"
-            break
+    for index in _boundaries(manifest, host, stopped):
         yield session.step()
-        steps += 1
+        steps = index + 1
     if result is not None:
-        result.append(TraceRun(steps, session.total_t_states, reason, bytes(host.output)))
+        result.append(TraceRun(steps, session.total_t_states, stopped.reason, bytes(host.output)))
+
+
+def write_checkpoints(
+    manifest: Manifest,
+    every: int,
+    directory: str | Path,
+    *,
+    result: list[TraceRun] | None = None,
+) -> list[Path]:
+    """Run ``manifest`` without records and write a resuming manifest every ``every`` boundaries.
+
+    Each checkpoint carries the full 64 KiB as a ``file`` segment beside it,
+    every ``CPUState`` field as ``initial``, and ``max_steps`` of ``every``,
+    so diffing the checkpoints in parallel proves what the single lockstep
+    run proves: each segment starts from the state the previous one ended
+    in, so a divergence anywhere is reported by the segment holding it.
+    The run itself is bare ``step()`` calls with the same stop checks as
+    :func:`trace_manifest`, which is what makes writing the checkpoints for
+    a multi-billion-record run quick.
+
+    Manifests with ``events`` are refused, because their ``at_step`` values
+    would have to be shifted into each segment.
+    """
+
+    if type(every) is not int or every <= 0:
+        raise ValueError("every must be a positive integer")
+    if manifest.events:
+        raise ValueError("checkpoints are not supported for manifests with events")
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    host = ConformanceHost(manifest)
+    stopped = _Stop()
+    paths: list[Path] = []
+    steps = 0
+    t_states = 0
+    for index in _boundaries(manifest, host, stopped):
+        if index % every == 0:
+            paths.append(_write_checkpoint(manifest, host, index, every, directory))
+        t_states += host.step()
+        steps = index + 1
+    if result is not None:
+        result.append(TraceRun(steps, t_states, stopped.reason, bytes(host.output)))
+    return paths
+
+
+def _write_checkpoint(
+    manifest: Manifest, host: ConformanceHost, at_step: int, every: int, directory: Path
+) -> Path:
+    stem = f"{manifest.name}-{at_step:012d}"
+    (directory / f"{stem}.mem").write_bytes(bytes(host.memory))
+    state = host.capture_state()
+    document = {
+        "version": MANIFEST_SCHEMA_VERSION,
+        "name": stem,
+        "host": manifest.host,
+        "port_read_value": manifest.port_read_value,
+        "memory": [{"address": 0, "file": f"{stem}.mem"}],
+        "initial": {name: getattr(state, name) for name in _STATE_FIELD_NAMES},
+        "events": [],
+        "stop": {
+            "max_steps": every,
+            "on_halt": manifest.stop.on_halt,
+            "at_pc": list(manifest.stop.at_pc),
+        },
+    }
+    path = directory / f"{stem}.json"
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def diff_manifest(manifest: Manifest, external: Iterable[StepRecord]) -> TraceDivergence | None:
@@ -463,7 +558,8 @@ def _allowed(value: dict[str, object], name: str, keys: set[str], *, required: s
 
 
 def main(argv: list[str] | None = None, *, stdout: TextIO | None = None) -> int:
-    """``trace`` writes the reference trace; ``diff`` reports the first divergence.
+    """``trace`` writes the reference trace; ``diff`` reports the first divergence;
+    ``checkpoints`` writes resuming manifests for a long run.
 
     Exit status: 0 on success or equal traces, 1 on divergence, 2 on bad input.
     """
@@ -480,6 +576,13 @@ def main(argv: list[str] | None = None, *, stdout: TextIO | None = None) -> int:
     diff_cmd = commands.add_parser("diff", help="compare an external trace against the reference")
     diff_cmd.add_argument("manifest")
     diff_cmd.add_argument("trace", help="JSON Lines trace path, or '-' for stdin")
+    checkpoints_cmd = commands.add_parser(
+        "checkpoints",
+        help="run without records and write a resuming manifest every N boundaries",
+    )
+    checkpoints_cmd.add_argument("manifest")
+    checkpoints_cmd.add_argument("--every", type=int, required=True, help="boundaries per segment")
+    checkpoints_cmd.add_argument("--dir", required=True, help="directory for the checkpoints")
     args = parser.parse_args(argv)
 
     try:
@@ -503,6 +606,22 @@ def main(argv: list[str] | None = None, *, stdout: TextIO | None = None) -> int:
         )
         if run.output:
             print(run.output.decode("latin-1"), file=sys.stderr if not args.out else out)
+        return 0
+
+    if args.command == "checkpoints":
+        result = []
+        try:
+            paths = write_checkpoints(manifest, args.every, args.dir, result=result)
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=out)
+            return 2
+        run = result[0]
+        print(
+            f"{manifest.name}: {len(paths)} checkpoints every {args.every} boundaries "
+            f"in {args.dir}; {run.steps} records, {run.t_states} T-states, "
+            f"stopped on {run.reason}",
+            file=out,
+        )
         return 0
 
     try:

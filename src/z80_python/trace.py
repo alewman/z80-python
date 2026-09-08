@@ -239,16 +239,18 @@ def _append(
         differences.append(TraceDifference(path, left, right))
 
 
+_STATE_FIELDS = tuple(field.name for field in fields(CPUState))
+
+
 def _compare_state(
     differences: list[TraceDifference], prefix: str, left: CPUState, right: CPUState
 ) -> None:
-    for field in fields(CPUState):
-        _append(
-            differences,
-            f"{prefix}.{field.name}",
-            getattr(left, field.name),
-            getattr(right, field.name),
-        )
+    if left == right:
+        # The common case in a lockstep diff: one tuple comparison instead of
+        # walking the fields.
+        return
+    for name in _STATE_FIELDS:
+        _append(differences, f"{prefix}.{name}", getattr(left, name), getattr(right, name))
 
 
 def _compare_instruction(
@@ -271,13 +273,15 @@ def _compare_instruction(
 
 
 def _state_to_dict(state: CPUState) -> dict[str, int | bool | None]:
-    return {field.name: getattr(state, field.name) for field in fields(CPUState)}
+    return {name: getattr(state, name) for name in _STATE_FIELDS}
+
+
+_STATE_FIELD_SET = frozenset(_STATE_FIELDS)
 
 
 def _state_from_dict(value: object, name: str) -> CPUState:
     encoded = _require_object(value, name)
-    field_names = {field.name for field in fields(CPUState)}
-    _require_keys(encoded, name, field_names)
+    _require_keys(encoded, name, _STATE_FIELD_SET)
     try:
         return CPUState(**encoded)
     except (TypeError, ValueError) as exc:
