@@ -8,7 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from z80_python import BoundaryKind, CPUState, read_trace, step_record_to_dict, write_trace
+from z80_python import (
+    BoundaryKind,
+    CPUState,
+    compare_step_records,
+    read_trace,
+    step_record_to_dict,
+    write_trace,
+)
 from z80_python.conformance import (
     Event,
     Manifest,
@@ -20,6 +27,7 @@ from z80_python.conformance import (
     manifest_from_dict,
     manifest_to_dict,
     trace_manifest,
+    write_checkpoints,
 )
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "conformance"
@@ -297,3 +305,46 @@ def test_interrupt_scenario_manifests_cover_the_cross_check() -> None:
         BoundaryKind.INSTRUCTION,
         BoundaryKind.MASKABLE_INTERRUPT,
     )
+
+
+# --- checkpoints -----------------------------------------------------------------
+
+
+def test_checkpoints_split_a_run_into_resumable_segments(tmp_path: Path) -> None:
+    """The concatenated segment traces equal the whole trace, record for record."""
+    manifest = load_manifest(EXAMPLES / "flags-and-branches.json")
+    result: list = []
+    paths = write_checkpoints(manifest, 5, tmp_path, result=result)
+
+    assert [path.name for path in paths] == [
+        f"flags-and-branches-{index:012d}.json" for index in (0, 5, 10, 15)
+    ]
+    assert (result[0].steps, result[0].reason) == (18, "halted")
+    whole = list(trace_manifest(manifest))
+    pieces = [record for path in paths for record in trace_manifest(load_manifest(path))]
+    assert len(pieces) == len(whole)
+    for expected, actual in zip(whole, pieces, strict=True):
+        assert not compare_step_records(expected, actual)  # sequence is ignored by design
+
+
+def test_checkpoints_refuse_manifests_with_events(tmp_path: Path) -> None:
+    manifest = load_manifest(EXAMPLES / "interrupts.json")
+    with pytest.raises(ValueError, match="events"):
+        write_checkpoints(manifest, 5, tmp_path)
+    with pytest.raises(ValueError, match="every"):
+        write_checkpoints(load_manifest(EXAMPLES / "flags-and-branches.json"), 0, tmp_path)
+
+
+def test_cli_checkpoints(tmp_path: Path) -> None:
+    manifest = str(EXAMPLES / "prefix-sequences.json")
+    out = io.StringIO()
+    assert main(["checkpoints", manifest, "--every", "4", "--dir", str(tmp_path)], stdout=out) == 0
+    assert "3 checkpoints every 4 boundaries" in out.getvalue()
+    assert "9 records" in out.getvalue()
+    for path in sorted(tmp_path.glob("*.json")):
+        segment = load_manifest(path)
+        assert segment.stop.max_steps == 4
+        with (path.with_suffix(".jsonl")).open("w", encoding="utf-8") as handle:
+            write_trace(trace_manifest(segment), handle)
+        out = io.StringIO()
+        assert main(["diff", str(path), str(path.with_suffix(".jsonl"))], stdout=out) == 0
