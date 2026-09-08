@@ -75,6 +75,7 @@ text with this project's disassembler. Stream to a file or a pipe.
 ```text
 python -m z80_python.conformance trace manifest.json --out reference.jsonl
 python -m z80_python.conformance diff  manifest.json yours.jsonl
+python -m z80_python.conformance checkpoints manifest.json --every N --dir segments/
 ```
 
 `diff` runs the reference core in lockstep with your trace and stops at the
@@ -83,6 +84,28 @@ differing path with both values. It reads lazily, so `yours.jsonl` can be a
 pipe from a still-running core (`-` for stdin) and a multi-hour ZEX run stops
 at the first bad instruction rather than the end. Exit status is 0 for
 identical, 1 for a divergence, 2 for a malformed manifest or trace.
+
+### Long runs: checkpoints and parallel segments
+
+The reference side of `diff` builds, validates, and compares two complete
+`CPUState` values per record on top of running the core, so it manages a
+few thousand records per second on CPython and a few tens of thousands on
+PyPy. ZEXALL is 5,764,169,474 records: a single pipe would take days.
+
+```text
+python -m z80_python.conformance checkpoints zexall.json --every 50000000 --dir segments/
+```
+
+runs the manifest with bare `step()` calls (minutes on PyPy for all of
+ZEXALL) and writes a manifest at boundary 0, N, 2N, ... that resumes the
+run from there: the full 64 KiB as a `file` segment beside it, every
+`CPUState` field as `initial`, and `max_steps` of N. Diff every checkpoint
+against your core's trace of it, as many in parallel as you have cores.
+Each segment starts from the state the previous one ended in, so a
+divergence anywhere is reported by the segment that holds it, and a clean
+result on every segment is a clean result for the whole run. Manifests with
+`events` are refused, since their `at_step` values would have to be shifted.
+z80-rust's `scripts/rung3.sh` is a worked example.
 
 `examples/conformance/` holds three manifests with their committed reference
 traces: a straight-line flag and branch program, an interrupt scenario with a
