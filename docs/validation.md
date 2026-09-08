@@ -151,6 +151,38 @@ hardware for the covered instruction groups.** It does not extend to
 interrupt sequencing or cycle/bus timing -- z80test verifies flags and
 registers, not T-states, and none of its programs exercise interrupts.
 
+## FUSE core tests (emulator-derived, six explained divergences)
+
+FUSE, the Free Unix Spectrum Emulator, ships a Z80 core test set
+(`z80/tests/tests.in` and `tests.expected`, GPL-2.0) of 1,356
+single-instruction cases whose expected values come from FUSE's own core.
+It is an emulator-derived oracle, a tier below the two above, and is run
+because it holds a few sequences neither of them covers: `ddfd00`, a run of
+prefixes, is one. `validation/fuse_runner.py` reproduces `coretest.c`'s
+machine (RAM filled with `DE AD BE EF`, port reads returning the high byte
+of the port address, whole instructions until the requested T-states have
+elapsed) and compares registers, MEMPTR, I, R, IFF1, IFF2, IM, the halted
+flag, the T-state total, and every listed memory byte; the bus events in
+the expected file are outside this core's claim and are not compared.
+
+Fetch the pinned release with `python scripts/fetch_fuse_tests.py`
+(`fuse-1.6.0.tar.gz`, SHA-256 `3a8fedf2…047096`), then run
+`python -m pytest tests/test_fuse_suite.py -q`.
+
+Result at commit `cab1598`: **1,350 of 1,356 agree**. The six that do not
+are pinned as strict expected failures, each with the hardware-derived
+source the core follows instead:
+
+| Case | FUSE 1.6.0 expects | This core, and why |
+| --- | --- | --- |
+| `76` | PC stays on the HALT opcode while halted | PC past the opcode, as SingleStepTests `76.json` records |
+| `edb2_1`, `edb3_1`, `edba_1`, `edbb_1` | interrupted INIR/OTIR/INDR/OTDR: MEMPTR = BC ± 1, pre-2021 flags | MEMPTR = PC + 1 and the corrected PV/H/X/Y, as SingleStepTests encodes and z80test 1.2a's `z80memptr` captured from silicon ("Fixed CRCs of interrupted INIR and INDR") |
+| `edb9_2` | interrupted CPDR: X/Y not from PC | X/Y from the rewound PC's high byte, as SingleStepTests encodes |
+
+The precise claim this adds is small: **one more independent core agrees on
+1,350 single-instruction cases, and every disagreement is accounted for by a
+higher-tier source.** It adds no hardware evidence.
+
 ## Independent-implementation cross-check (interrupt lifecycle)
 
 No publicly known hardware-captured test corpus exists for interrupt

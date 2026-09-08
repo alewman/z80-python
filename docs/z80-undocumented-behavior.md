@@ -166,9 +166,10 @@ Sources cited on this page and in the handlers' comments:
   2005 (GNU FDL): <http://www.z80.info/zip/z80-documented.pdf>. Section 4.3
   for the block I/O flags, 3.7 and 6.1 for prefix runs, chapter 5 for
   interrupts.
-- FUSE, the Free Unix Spectrum Emulator, `z80/tests/tests.in` and
-  `tests.expected` (GPL-2.0): 1,242 emulator-derived cases, of which
-  `ddfd00` is the one prefix-run vector.
+- FUSE, the Free Unix Spectrum Emulator, release 1.6.0, `z80/tests/tests.in`
+  and `tests.expected` (GPL-2.0): 1,356 emulator-derived cases, of which
+  `ddfd00` is the one prefix-run vector. `validation/fuse_runner.py` runs
+  them all; [validation](validation.md) records the result.
 
 If you need a rule that is not here, look at the comment on the handler first;
 the generator inside the fetched corpus
