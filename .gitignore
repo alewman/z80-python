@@ -18,4 +18,5 @@ htmlcov/
 tests/z80_test_vectors/
 tests/zex/
 validation/z80test_data/
+validation/fuse_data/
 validation/interrupt_oracle_src/

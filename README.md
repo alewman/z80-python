@@ -36,7 +36,12 @@ The instruction core has passed:
   `z80ccf`)—values captured from a real 48K ZX Spectrum's Zilog Z80, covering
   instruction semantics and flags including SCF/CCF's undocumented X/Y-flag
   behavior against the genuine NMOS convention. This is the project's first
-  certification against real silicon rather than a software-derived corpus.
+  certification against real silicon rather than a software-derived corpus;
+  and
+- FUSE 1.6.0's Z80 core test set, **1,356** emulator-derived cases, of which
+  1,350 agree and the six that do not are each explained by a
+  hardware-derived source the core follows instead
+  ([validation](docs/validation.md)).
 
 The current processor implementation was recertified after the lifecycle and
 inspection work. Exact source revisions, hashes, commands, timings, and scope
