@@ -96,8 +96,9 @@ PyPy. ZEXALL is 5,764,169,474 records: a single pipe would take days.
 python -m z80_python.conformance checkpoints zexall.json --every 50000000 --dir segments/
 ```
 
-runs the manifest with bare `step()` calls (minutes on PyPy for all of
-ZEXALL) and writes a manifest at boundary 0, N, 2N, ... that resumes the
+runs the manifest with bare `step()` calls (all of ZEXALL in 37 minutes on
+PyPy 7.3.20, on the machine in [validation](validation.md)) and writes a
+manifest at boundary 0, N, 2N, ... that resumes the
 run from there: the full 64 KiB as a `file` segment beside it, every
 `CPUState` field as `initial`, and `max_steps` of N. Diff every checkpoint
 against your core's trace of it, as many in parallel as you have cores.
