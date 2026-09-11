@@ -158,8 +158,8 @@ class ControlMixin:
         """EX (SP),HL"""
         value = self.read_byte(self.sp) | (self.read_byte((self.sp + 1) & 0xFFFF) << 8)
         hl = self._hl()
-        self.write_byte(self.sp, hl & 0xFF)
         self.write_byte((self.sp + 1) & 0xFFFF, hl >> 8)
+        self.write_byte(self.sp, hl & 0xFF)
         self.h = (value >> 8) & 0xFF
         self.l = value & 0xFF
         self.wz = value
