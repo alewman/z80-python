@@ -75,7 +75,10 @@ class Z80CPU(
         An asserted RESET takes priority over NMI and an accepted maskable interrupt;
         each is serviced before instruction fetch. A halted CPU consumes a four-T-state
         idle cycle until an accepted interrupt wakes it. T-states are
-        instruction/lifecycle totals, not externally observable bus cycles.
+        instruction/lifecycle totals, not externally observable bus cycles: a host
+        learns how long an instruction took, not which T-state each access occupied.
+        The accesses themselves -- their kind, address, value, and order -- are
+        certified against the SingleStepTests pin traces (see docs/validation.md).
         ``decode_and_execute()`` remains the historical instruction-only compatibility
         entry point.
         """
