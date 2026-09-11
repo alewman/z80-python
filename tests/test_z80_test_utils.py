@@ -20,6 +20,7 @@ from validation.vector_utils import (
     VectorCPU,
     _main,
     assert_state_equal,
+    expected_memory_transactions,
     expected_state,
     load_json_vector,
     run_test_case,
@@ -185,7 +186,9 @@ def test_run_test_case_returns_vector_shaped_final_state(
 
     monkeypatch.setattr(VectorCPU, "decode_and_execute", fake_decode_and_execute)
 
-    actual = run_test_case(real_case)
+    # The stub performs no memory access, so its empty bus log says nothing
+    # about the real core; this test is about run_test_case's return shape.
+    actual = run_test_case(real_case, verify_memory_bus=False)
     final = real_case["final"]
     assert set(actual) == set(REGISTER_FIELDS) | {"ram", "t_states"}
     assert actual["ram"] == final["ram"]
@@ -245,3 +248,63 @@ def test_assert_state_equal_reports_ram_mismatch_and_unexpected_address(
 
 def test_main_guard_self_test_runs() -> None:
     _main()  # raises AssertionError if any embedded-sample check fails
+
+
+# --- memory bus transactions ------------------------------------------------
+
+
+def test_expected_memory_transactions_reads_latch_on_the_following_cycle() -> None:
+    """A read asserts ``r-m-``; its data byte appears on the next cycle entry."""
+    case = {
+        "cycles": [
+            [0x1000, None, "----"],
+            [0x1000, None, "r-m-"],
+            [0x4D2A, 0x3E, "----"],
+        ]
+    }
+    assert expected_memory_transactions(case) == [("MR", 0x1000, 0x3E)]
+
+
+def test_expected_memory_transactions_writes_carry_their_value_inline() -> None:
+    case = {"cycles": [[0x8001, 0xD7, "-wm-"], [0x8000, 0x49, "-wm-"]]}
+    assert expected_memory_transactions(case) == [
+        ("MW", 0x8001, 0xD7),
+        ("MW", 0x8000, 0x49),
+    ]
+
+
+def test_expected_memory_transactions_skips_internal_and_refresh_cycles() -> None:
+    """Idle cycles and the M1 ``I << 8 | R`` refresh address carry no strobe."""
+    case = {"cycles": [[0x0000, None, "----"], [0x3D74, 0x7E, "----"]]}
+    assert expected_memory_transactions(case) == []
+
+
+def test_expected_memory_transactions_ignores_port_strobes() -> None:
+    """Port order is already checked by VectorCPU's port_inputs/port_outputs."""
+    case = {"cycles": [[0x00FE, None, "r--i"], [0x00FE, 0xBF, "----"]]}
+    assert expected_memory_transactions(case) == []
+
+
+def test_expected_memory_transactions_without_cycles_returns_none() -> None:
+    assert expected_memory_transactions({"final": {}}) is None
+
+
+def test_run_test_case_detects_reordered_memory_writes(
+    monkeypatch: pytest.MonkeyPatch, real_case: dict
+) -> None:
+    """A core whose writes land in the wrong order must fail, even though the
+    resulting memory is identical and no state comparison can see it."""
+
+    def swapped_writes(self: VectorCPU) -> int:
+        self.pc = (self.pc + 1) & 0xFFFF
+        self._inc_r()
+        self._update_q(False)
+        self.write_byte(0x9001, 0xD7)
+        self.write_byte(0x9000, 0x49)
+        return 4
+
+    monkeypatch.setattr(VectorCPU, "decode_and_execute", swapped_writes)
+    case = copy.deepcopy(real_case)
+    case["cycles"] = [[0x9000, 0x49, "-wm-"], [0x9001, 0xD7, "-wm-"]]
+    with pytest.raises(AssertionError, match="memory bus transaction mismatch"):
+        run_test_case(case)
