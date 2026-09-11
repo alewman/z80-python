@@ -18,8 +18,10 @@ The format and the harness conventions are those of FUSE's ``coretest.c``:
   have elapsed; the expected total is the sum actually consumed.
 * The expected file lists bus events (``MC``/``MR``/``MW``/``PR``/``PW``/
   ``PC`` with their cycle) before the final registers and changed memory.
-  This core models instruction totals, not bus cycles, so the events are
-  parsed and ignored; registers, MEMPTR, I, R, IFF1, IFF2, IM, the halted
+  They are parsed and ignored here: transaction order is certified against
+  SingleStepTests' pin traces, a hardware-corrected oracle, so this
+  emulator-derived one adds nothing to that claim; the per-cycle timing the
+  events also carry is not modelled at all; registers, MEMPTR, I, R, IFF1, IFF2, IM, the halted
   flag, the T-state total, and every listed memory byte are compared.
 """
 
