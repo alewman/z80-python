@@ -264,8 +264,8 @@ class IndexMixin:
         """EX (SP),IX/IY"""
         value = self.read_byte(self.sp) | (self.read_byte((self.sp + 1) & 0xFFFF) << 8)
         index = self._get_index(prefix)
-        self.write_byte(self.sp, index & 0xFF)
         self.write_byte((self.sp + 1) & 0xFFFF, index >> 8)
+        self.write_byte(self.sp, index & 0xFF)
         self._set_index(prefix, value)
         self.wz = value
         self._update_q(False)
