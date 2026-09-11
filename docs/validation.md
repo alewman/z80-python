@@ -7,7 +7,10 @@ Z80 instruction core**. The claim covers instruction-level semantic state and
 long execution sequences. It includes a deterministic instruction-boundary model for
 RESET, maskable interrupt acceptance/service, NMI, EI delay, and HALT wakeup. It does
 not claim cycle-accurate external bus signaling, a complete Z80 machine, CP/M, device
-scheduling, or memory contention.
+scheduling, or memory contention. It does claim the memory and I/O accesses
+themselves -- which ones happen, to which addresses, with which values, in which
+order -- certified against hardware-corrected pin traces; see
+[Bus transactions](#bus-transactions).
 
 The specific lifecycle contract, mode coverage, and remaining exclusions are in
 [interrupt-lifecycle.md](interrupt-lifecycle.md).
@@ -22,7 +25,7 @@ commit changed only `scripts/fetch_z80test.py`.
 
 | Gate | Result | CPython 3.14.4 | PyPy 7.3.20 |
 | --- | --- | ---: | ---: |
-| SingleStepTests, 1,604 files, 1,604,000 cases, registers + RAM + I/O + **T-states** | all passed | 28 s | 110 s (with fast suite) |
+| SingleStepTests, 1,604 files, 1,604,000 cases, registers + RAM + I/O + **T-states** + **bus transactions** | all passed | 28 s | 110 s (with fast suite) |
 | Fast suite incl. `tests/test_readability.py` | 3,089 passed | 2 s | (included above) |
 | ZEXDOC | `Tests complete`, no `ERROR` | 5,523.8 s | 358.4 s |
 | ZEXALL | `Tests complete`, no `ERROR` | 5,623.7 s | 340.8 s |
@@ -44,16 +47,19 @@ programs are missing.
 The complete `SingleStepTests/z80` corpus used for certification contains 1,604
 opcode/prefix variants with 1,000 initial-to-final state transitions each:
 **1,604,000 cases total**. It observes registers, flags, RAM effects, I/O
-ordering, refresh register `R`, WZ/MEMPTR, Q, alternate registers, and returned
-T-state counts. It is an instruction oracle, not a bus-pin trace.
+ordering, refresh register `R`, WZ/MEMPTR, Q, alternate registers, returned
+T-state counts, and the memory bus transactions each instruction performs.
 
-Every case also carries a `cycles` array with one entry per T-state the oracle
-spent on the instruction. The vector gate compares its length against the value
-`Z80CPU.step()` returns, so the T-state claim below is checked by the same
-1,604,000 cases as the state claim: taken versus not-taken conditional branches,
-21-versus-16 block repeats, and the 4 T-states every DD/FD prefix adds. Earlier
-harness revisions compared registers, RAM, and I/O only; T-states were then
-pinned by per-opcode unit tests alone.
+Every case also carries a `cycles` array with one `[address, data, pins]` entry
+per T-state the oracle spent on the instruction. The vector gate reads it twice.
+Its length is compared against the value `Z80CPU.step()` returns, so the T-state
+claim below is checked by the same 1,604,000 cases as the state claim: taken
+versus not-taken conditional branches, 21-versus-16 block repeats, and the 4
+T-states every DD/FD prefix adds. Its entries are then compared against the
+memory accesses the core actually performed — see
+[Bus transactions](#bus-transactions) below. Earlier harness revisions compared
+registers, RAM, and I/O only; T-states were then pinned by per-opcode unit tests
+alone, and the `cycles` entries were read for their count and discarded.
 
 The corpus is external, MIT-licensed, and deliberately not bundled. The pinned
 source is:
@@ -75,6 +81,43 @@ Certified result under CPython 3.12.10 and PyPy 7.3.20 / Python 3.11.13:
 FILES: 1604 passed, 0 not implemented (skipped), 0 failed
 TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases
 ```
+
+## Bus transactions
+
+Two claims are separated here, because the evidence supports one and not the
+other.
+
+**Certified: which accesses happen, and in what order.** Each SingleStepTests
+case's `cycles` array marks a memory read with the pin string `r-m-`, whose data
+byte latches on the following entry, and a memory write with `-wm-`, which
+carries its value inline. `VectorCPU` records every `read_byte`/`write_byte` the
+instruction performs and `run_test_case` compares the two sequences exactly, on
+kind, address, value and order:
+
+```text
+1,604,000 of 1,604,000 cases agree
+```
+
+Port strobes (`r--i` / `-w-i`) are excluded from that comparison because they
+were already covered: `VectorCPU` feeds port reads from the vector's own `ports`
+array in oracle order and refuses a read at an unexpected address, and verifies
+every port write against the expected entry.
+
+**Not claimed: which T-state each access occupies.** `step()` returns an
+instruction total, so a host learns that `EX (SP),HL` took 19 T-states but not
+that its two writes land at T13 and T16. Entries in `cycles` without a memory
+strobe -- internal cycles, and the `I << 8 | R` refresh address the Z80 asserts
+during M1 -- are skipped rather than modelled. This boundary is architectural,
+not evidential: the `cycles` array carries the per-T-state data, and would
+support the stronger claim whenever the core can emit at that granularity.
+
+The distinction is not academic. Two write orderings that leave identical memory
+are indistinguishable to every state-comparing oracle -- ZEXALL, z80test, and
+this corpus's own register/RAM comparison all pass either one -- yet a host with
+memory-mapped registers or contended-memory timing observes the difference.
+`EX (SP),HL` and its `IX`/`IY` forms wrote the low byte first until commit
+`2afb3f9`; the whole suite passed before and after that fix, and only the pin
+traces could tell them apart.
 
 ## ZEX long-sequence certification
 
@@ -162,8 +205,13 @@ prefixes, is one. `validation/fuse_runner.py` reproduces `coretest.c`'s
 machine (RAM filled with `DE AD BE EF`, port reads returning the high byte
 of the port address, whole instructions until the requested T-states have
 elapsed) and compares registers, MEMPTR, I, R, IFF1, IFF2, IM, the halted
-flag, the T-state total, and every listed memory byte; the bus events in
-the expected file are outside this core's claim and are not compared.
+flag, the T-state total, and every listed memory byte. The bus events in
+the expected file are not compared here: transaction order is certified
+against SingleStepTests' pin traces instead, which is the same property
+measured by a hardware-corrected oracle rather than an emulator-derived one.
+FUSE is the weaker witness for it and adds nothing once the stronger gate
+runs -- though it is what first surfaced the `EX (SP),rr` ordering defect,
+which is the proper use of a tier-3 oracle: a detector, never a judge.
 
 Fetch the pinned release with `python scripts/fetch_fuse_tests.py`
 (`fuse-1.6.0.tar.gz`, SHA-256 `3a8fedf2…047096`), then run
