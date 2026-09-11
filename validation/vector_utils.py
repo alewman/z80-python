@@ -109,11 +109,16 @@ class VectorCPU(Z80CPU):
         self.port_inputs: list[tuple[int, int]] = []
         #: Recorded ``(addr, value)`` port writes, in execution order.
         self.port_outputs: list[tuple[int, int]] = []
+        #: Recorded ``("MR"|"MW", addr, value)`` memory accesses, in bus order.
+        self.memory_transactions: list[tuple[str, int, int]] = []
 
     def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
+        value = self.memory[addr & 0xFFFF]
+        self.memory_transactions.append(("MR", addr & 0xFFFF, value))
+        return value
 
     def write_byte(self, addr: int, value: int) -> None:
+        self.memory_transactions.append(("MW", addr & 0xFFFF, value & 0xFF))
         self.memory[addr & 0xFFFF] = value & 0xFF
 
     def read_port(self, addr: int) -> int:
@@ -341,7 +346,7 @@ def _verify_port_outputs(cpu: VectorCPU, ports: object) -> None:
         )
 
 
-def run_test_case(case: dict) -> dict:
+def run_test_case(case: dict, *, verify_memory_bus: bool = True) -> dict:
     """Run one vector test case and return the final register/RAM state.
 
     Sets up the CPU from ``case["initial"]``, feeds the port reads listed in
@@ -358,6 +363,10 @@ def run_test_case(case: dict) -> dict:
     public host entry point, and the vector state never carries a pending
     RESET/NMI/INT request, so the two are equivalent here except that
     ``step()`` is the one whose timing a host actually schedules from.
+
+    ``verify_memory_bus`` may be set False when the caller has replaced
+    ``decode_and_execute`` with a stub that performs no memory access; the
+    stub's empty transaction log is not evidence about the real core.
 
     Raises:
         OpcodeNotImplementedError: if ``decode_and_execute`` raises
@@ -379,6 +388,9 @@ def run_test_case(case: dict) -> dict:
 
     cpu = setup_cpu(case["initial"])
     _load_port_inputs(cpu, case.get("ports", []))
+    # setup_cpu loads the initial RAM through write_byte, so the log holds that
+    # setup traffic. Only the instruction's own bus activity is being compared.
+    cpu.memory_transactions.clear()
     try:
         t_states = cpu.step()
     except NotImplementedError as exc:
@@ -388,10 +400,91 @@ def run_test_case(case: dict) -> dict:
             opcode=opcode,
             pc=pc,
         ) from exc
+    # Captured before _snapshot_state, whose read_byte calls would otherwise
+    # append to the same log.
+    memory_transactions = list(cpu.memory_transactions)
     _verify_port_outputs(cpu, case.get("ports", []))
+    if verify_memory_bus:
+        _verify_memory_transactions(memory_transactions, case)
     state = _snapshot_state(cpu, case["final"])
     state["t_states"] = t_states
     return state
+
+
+#: SingleStepTests pin strings for the two memory strobes. A read asserts
+#: ``r-m-`` and the data latches on the *following* cycle entry; a write
+#: carries its value inline on the ``-wm-`` entry. Port strobes (``r--i`` /
+#: ``-w-i``) are deliberately absent: those are already checked, in oracle
+#: order, by :class:`VectorCPU`'s ``port_inputs``/``port_outputs``.
+_MEMORY_STROBES = {"r-m-": "MR", "-wm-": "MW"}
+
+
+def expected_memory_transactions(case: dict) -> list[tuple[str, int, int]] | None:
+    """Return the memory bus transactions a case's ``cycles`` array records.
+
+    The ``cycles`` array holds one ``[address, data, pins]`` entry per T-state.
+    Entries without a memory strobe -- internal cycles, and the ``I << 8 | R``
+    refresh address the Z80 asserts during M1 -- carry no transaction and are
+    skipped, so this is a claim about *which* accesses happen in *what order*,
+    not about which T-state each one occupies.
+
+    Returns ``None`` for a case with no ``cycles`` array (older or hand-written
+    vectors), so callers skip the comparison rather than invent an expectation.
+    """
+    cycles = case.get("cycles")
+    if cycles is None:
+        return None
+    if not isinstance(cycles, list):
+        raise ValueError(
+            f"'cycles' must be a list of per-T-state entries, got {type(cycles).__name__}"
+        )
+    transactions: list[tuple[str, int, int]] = []
+    for index, entry in enumerate(cycles):
+        try:
+            address, data, pins = entry
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"invalid cycles entry {entry!r}: expected [address, data, pins]"
+            ) from exc
+        kind = _MEMORY_STROBES.get(pins)
+        if kind is None:
+            continue
+        if kind == "MW":
+            value = data
+        else:
+            following = cycles[index + 1] if index + 1 < len(cycles) else None
+            value = following[1] if following is not None else None
+        if value is None:
+            raise ValueError(f"cycles entry {index} ({pins}) carries no data byte")
+        transactions.append((kind, address & 0xFFFF, value & 0xFF))
+    return transactions
+
+
+def _format_transactions(transactions: list[tuple[str, int, int]]) -> str:
+    """Render a transaction list for a readable mismatch message."""
+    return " ".join(f"{kind}[{addr:04X}]={value:02X}" for kind, addr, value in transactions)
+
+
+def _verify_memory_transactions(observed: list[tuple[str, int, int]], case: dict) -> None:
+    """Assert the CPU's memory accesses match the oracle's, in bus order.
+
+    Two orderings that leave identical memory are still different on the bus,
+    which is what a host with memory-mapped registers or contended-memory
+    timing observes.  No state comparison can see that difference, so it is
+    checked here against the pin traces directly.
+
+    Raises:
+        AssertionError: if the observed transactions differ from the expected
+            ones in kind, address, value, or order.
+    """
+    expected = expected_memory_transactions(case)
+    if expected is None or observed == expected:
+        return
+    raise AssertionError(
+        "memory bus transaction mismatch:\n"
+        f"  expected: {_format_transactions(expected)}\n"
+        f"  actual:   {_format_transactions(observed)}"
+    )
 
 
 def _snapshot_state(cpu: VectorCPU, final: dict) -> dict:
