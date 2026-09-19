@@ -210,10 +210,14 @@ and the three internal registers (WZ, Q, R) that only emulator authors meet.
 
 The implementation is organized by instruction family behind a small public
 `Z80CPU` facade. Every opcode handler's docstring starts with its Zilog
-mnemonic, so `grep DJNZ src/` lands on the implementation, and the hardware
-reason behind each undocumented flag or MEMPTR effect is a comment on the line
-that encodes it. A test (`tests/test_readability.py`) enforces the first
-property the same way the vector gate enforces correctness.
+mnemonic, so `grep DJNZ src/` lands on the implementation, and ends with where
+its rule comes from: a page of Zilog's *Z80 CPU User Manual* or a section of
+Young's *Undocumented Z80 Documented*, plus the SingleStepTests file (and,
+where one exists, the z80test program) that pins any WZ or Q rule neither
+manual covers. The hardware reason behind each undocumented flag or MEMPTR
+effect is a comment on the line that encodes it. A test
+(`tests/test_readability.py`) enforces the mnemonic and the citations the same
+way the vector gate enforces correctness.
 
 The development tree also provides immutable `CPUState` capture and restoration
 for processor-owned state and a complete structured disassembler for every opcode

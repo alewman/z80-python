@@ -124,7 +124,7 @@ class IndexDispatchMixin:
             # (4 T-states, R+1, already counted by _fetch_byte) and nothing else.
             # "In a large sequence of DD and FD bytes, it is the last one that
             # counts" (Young 3.7). No interrupt is accepted inside the run,
-            # because the run is one instruction to step() (Young, chapter 5).
+            # because the run is one instruction to step() (Young 5.5).
             prefix = sub_opcode
             sub_opcode = self._fetch_byte()
             stray_t_states += 4

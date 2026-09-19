@@ -19,7 +19,10 @@ class IOMixin:
     """Private immediate, register, and block I/O implementation."""
 
     def _op_in_a_n(self) -> int:
-        """IN A,(n) -- port address is A:n."""
+        """IN A,(n) -- port address is A:n (UM0080 p. 295; Young 4.4).
+
+        WZ: z80memptr; SST db.json.
+        """
         self.wz = (self.a << 8) | self._read_operand_byte()
         self.a = self.read_port(self.wz)
         self.wz = (self.wz + 1) & 0xFFFF
@@ -27,7 +30,10 @@ class IOMixin:
         return 11
 
     def _op_out_n_a(self) -> int:
-        """OUT (n),A -- port address is A:n."""
+        """OUT (n),A -- port address is A:n (UM0080 p. 306; Young 4.4).
+
+        WZ: z80memptr; SST d3.json.
+        """
         self.wz = (self.a << 8) | self._read_operand_byte()
         self.write_port(self.wz, self.a)
         # Same latch behavior as LD (nn),A: the port's high byte (A) is kept and only
@@ -37,7 +43,11 @@ class IOMixin:
         return 11
 
     def _op_in_r_c(self, opcode: int) -> int:
-        """IN r,(C) -- includes the undocumented IN (C) / IN F,(C) form that only sets flags."""
+        """IN r,(C) -- includes the undocumented IN (C) / IN F,(C) form that only sets flags (UM0080
+        p. 296; Young 3.4).
+
+        WZ: z80memptr; SST ed 40.json.
+        """
         dest = (opcode >> 3) & 0x07
         self.wz = (self._bc() + 1) & 0xFFFF
         value = self.read_port(self._bc())
@@ -48,7 +58,11 @@ class IOMixin:
         return 12
 
     def _op_out_c_r(self, opcode: int) -> int:
-        """OUT (C),r -- the undocumented OUT (C),0 form writes zero on NMOS parts."""
+        """OUT (C),r -- the undocumented OUT (C),0 form writes zero on NMOS parts (UM0080 p. 307;
+        Young 3.4).
+
+        WZ: z80memptr; SST ed 41.json.
+        """
         src = (opcode >> 3) & 0x07
         addr = self._bc()
         # OUT (C),0: the undocumented (HL) slot has no register, NMOS parts drive 0
@@ -109,31 +123,47 @@ class IOMixin:
         self._f = f
 
     def _op_ini(self) -> int:
-        """INI -- (HL) <- port BC; HL++, B--."""
+        """INI -- (HL) <- port BC; HL++, B-- (UM0080 p. 298; Young 4.3).
+
+        WZ: z80memptr; SST ed a2.json.
+        """
         self._block_ini(True)
         self.q = self._f
         return 16
 
     def _op_ind(self) -> int:
-        """IND -- (HL) <- port BC; HL--, B--."""
+        """IND -- (HL) <- port BC; HL--, B-- (UM0080 p. 302; Young 4.3).
+
+        WZ: z80memptr; SST ed aa.json.
+        """
         self._block_ini(False)
         self.q = self._f
         return 16
 
     def _op_outi(self) -> int:
-        """OUTI -- B--, then port BC <- (HL); HL++."""
+        """OUTI -- B--, then port BC <- (HL); HL++ (UM0080 p. 309; Young 4.3).
+
+        WZ: z80memptr; SST ed a3.json.
+        """
         self._block_outi(True)
         self.q = self._f
         return 16
 
     def _op_outd(self) -> int:
-        """OUTD -- B--, then port BC <- (HL); HL--."""
+        """OUTD -- B--, then port BC <- (HL); HL-- (UM0080 p. 313; Young 4.3).
+
+        WZ: z80memptr; SST ed ab.json.
+        """
         self._block_outi(False)
         self.q = self._f
         return 16
 
     def _op_inir(self) -> int:
-        """INIR -- INI repeated while B != 0; 21 T-states per repeat, 16 on the last."""
+        """INIR -- INI repeated while B != 0; 21 T-states per repeat, 16 on the last (UM0080 p. 300;
+        Young 4.3).
+
+        WZ: z80memptr. The flags on a repeat: SST ed b2.json.
+        """
         repeat = self._block_ini(True)
         if repeat:
             self._block_repeat()
@@ -142,7 +172,11 @@ class IOMixin:
         return 21 if repeat else 16
 
     def _op_indr(self) -> int:
-        """INDR -- IND repeated while B != 0; 21 T-states per repeat, 16 on the last."""
+        """INDR -- IND repeated while B != 0; 21 T-states per repeat, 16 on the last (UM0080 p. 304;
+        Young 4.3).
+
+        WZ: z80memptr. The flags on a repeat: SST ed ba.json.
+        """
         repeat = self._block_ini(False)
         if repeat:
             self._block_repeat()
@@ -151,7 +185,11 @@ class IOMixin:
         return 21 if repeat else 16
 
     def _op_otir(self) -> int:
-        """OTIR -- OUTI repeated while B != 0; 21 T-states per repeat, 16 on the last."""
+        """OTIR -- OUTI repeated while B != 0; 21 T-states per repeat, 16 on the last (UM0080 p.
+        311; Young 4.3).
+
+        WZ: z80memptr. The flags on a repeat: SST ed b3.json.
+        """
         repeat = self._block_outi(True)
         if repeat:
             self._block_repeat()
@@ -160,7 +198,11 @@ class IOMixin:
         return 21 if repeat else 16
 
     def _op_otdr(self) -> int:
-        """OTDR -- OUTD repeated while B != 0; 21 T-states per repeat, 16 on the last."""
+        """OTDR -- OUTD repeated while B != 0; 21 T-states per repeat, 16 on the last (UM0080 p.
+        315; Young 4.3).
+
+        WZ: z80memptr. The flags on a repeat: SST ed bb.json.
+        """
         repeat = self._block_outi(False)
         if repeat:
             self._block_repeat()

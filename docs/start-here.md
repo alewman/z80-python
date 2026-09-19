@@ -101,9 +101,14 @@ instruction that writes no flags (so Q reads as 0 afterwards).
 | DD CB / FD CB | Indexed rotates and bit ops | Byte order is `DD CB d op`; the displacement comes before the final opcode. R advances by 2, not 4, because the last byte is read as an operand. The undocumented forms with z != 6 also copy the result into `r[z]` |
 | DD DD, DD FD, DD ED and the FD forms | Prefix runs | A DD or FD is a flag for the next opcode, not an instruction, so a run of them is legal: each stray one costs 4 T-states and increments R, the last one decides IX or IY, and an ED after any of them starts an ED instruction the flag cannot touch. The run and its opcode are one instruction boundary; no interrupt is accepted inside it |
 
-`_dispatch.py` and `_index_dispatch.py` are those tables written as if-chains.
-The explicit shape is deliberate: it is what PyPy compiles well, and every
-opcode is one grep away.
+`_dispatch.py` and `_index_dispatch.py` are those tables written as data:
+rules such as `(range(0x80, 0xC0), "_op_alu_r", OPCODE)`, built once per class
+into one 256-entry table per page, so executing an instruction is one list
+index and one call. Every entry names its `_op_*` handler, so every opcode is
+still one grep away, and every handler's docstring ends with the page of
+Zilog's manual (or the section of Young's) its rule comes from;
+[validation](validation.md#the-sources-every-handler-cites) lists the
+citation forms and pins both documents.
 
 ## T-states
 
