@@ -3,8 +3,10 @@
 # `pypi` environment as the project's publisher (registered 2026-09-18).
 #
 # A pushed release tag (v0.4.0, not v0.4.0-rc1) builds, smoke-tests and
-# uploads. Run it by hand (workflow_dispatch) to prove it without a release:
-# dry_run, the default, stops after `twine check`; only a tag is ever uploaded.
+# uploads. Every pull request runs the same build, check and smoke test as a
+# dry run, so a broken release is caught before the tag. Run it by hand
+# (workflow_dispatch) for the same dry run on any branch once this file is on
+# main; only a tag is ever uploaded.
 name: Publish
 
 on:
@@ -12,6 +14,7 @@ on:
     tags:
       - "v*"
       - "!v*-rc*"
+  pull_request:
   workflow_dispatch:
     inputs:
       dry_run:
