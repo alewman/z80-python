@@ -15,7 +15,14 @@ from z80_python._alu import ALUMixin
 from z80_python._blocks import BlockMixin
 from z80_python._control import ControlMixin
 from z80_python._core import CoreMixin
-from z80_python._dispatch import DispatchMixin
+from z80_python._dispatch import (
+    CB_RULES,
+    ED_DEFAULT,
+    ED_RULES,
+    MAIN_RULES,
+    DispatchMixin,
+    build_page,
+)
 from z80_python._flags import (
     FLAG_C,
     FLAG_H,
@@ -28,7 +35,7 @@ from z80_python._flags import (
     Flags,
 )
 from z80_python._index import IndexMixin
-from z80_python._index_dispatch import IndexDispatchMixin
+from z80_python._index_dispatch import INDEX_CB_RULES, INDEX_RULES, IndexDispatchMixin
 from z80_python._io import IOMixin
 from z80_python._loads import LoadMixin
 from z80_python._rotate import RotateBitMixin
@@ -117,6 +124,24 @@ class Z80CPU(
         self.read_port = read_port
         self.write_port = write_port
         super().__init__()
+        cls = type(self)
+        if "_pages" not in cls.__dict__:
+            # Built once per class, so a subclass that overrides a handler
+            # gets a table that routes to its override.
+            cls._pages = (
+                build_page(cls, MAIN_RULES),
+                build_page(cls, CB_RULES),
+                build_page(cls, ED_RULES, default=ED_DEFAULT),
+                build_page(cls, INDEX_RULES, unassigned=(0xDD, 0xED, 0xFD)),
+                [handler for handler, _ in build_page(cls, INDEX_CB_RULES)],
+            )
+        (
+            self._main_page,
+            self._cb_page,
+            self._ed_page,
+            self._index_page,
+            self._index_cb_page,
+        ) = cls._pages
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         # Until 0.4.0 a host subclassed Z80CPU and defined the bus as methods.

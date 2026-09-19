@@ -195,12 +195,13 @@ class ALUMixin:
         self._update_q(True)
         return 4
 
-    def _op_scf_ccf(self, opcode: int, *, prefixed: bool) -> int:
+    def _op_scf_ccf(self, opcode: int) -> int:
         """SCF/CCF -- including their Q-sensitive undocumented X/Y behavior."""
         # Q holds F only if the previous M1 cycle wrote flags. If it did, F's X/Y
         # are masked and A alone supplies them; otherwise X/Y = (F | A). A DD/FD
-        # prefix is its own M1 that writes no flags, so a prefixed SCF/CCF sees Q=0.
-        if self.q and not prefixed:
+        # prefix is its own M1 that writes no flags, so a prefixed SCF/CCF sees Q=0
+        # (_execute_index clears it).
+        if self.q:
             self.f.set_xy(0)
         old_carry = self.f.c
         if opcode == 0x37:
