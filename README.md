@@ -24,9 +24,10 @@ The project is deliberately:
   oracles, not from code-generation confidence;
 - **embeddable** — a host passes in its memory (and, optionally, I/O) as
   callables and controls when the processor advances; and
-- **inspectable** — processor state, disassembly, bounded debugging, and
-  structured traces make execution explainable without contaminating the hot
-  core path.
+- **inspectable** — processor state, disassembly, bounded debugging with
+  breakpoints, watchpoints and bus-access tracking, structured traces, and
+  `python -m z80_python` for stepping a binary make execution explainable
+  without contaminating the hot core path.
 
 ## Validation
 
