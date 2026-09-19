@@ -72,7 +72,7 @@ separated rather than implied:
 
 | Badge | Runs | When |
 | --- | --- | --- |
-| **CI** | unit and integration suite, Ruff, the example host, a wheel build and installed-API smoke test, on CPython 3.12/3.13/3.14 and PyPy 3.11; plus the FUSE oracle | every push and pull request |
+| **CI** | the fast suite, Ruff check and format, the example host, a wheel build and installed-API smoke test, on CPython 3.12/3.13/3.14 and PyPy 3.11; plus the FUSE oracle | every push and pull request |
 | **Oracles** | SingleStepTests (1,604 files, 1,604,000 cases), z80test (`z80full`, `z80ccf`, `z80memptr`), FUSE, and the superzazu/z80 interrupt cross-check, each against its pinned corpus | weekly, and on demand |
 
 **ZEXDOC and ZEXALL are certified locally, not in CI.** They need
@@ -96,15 +96,15 @@ See [AI-assisted development and validation](docs/ai-assisted-development.md).
 
 ## Version status
 
-The current release is **`0.3.0`**; **`0.4.0` is in progress** on `main`
-(see its [release note](docs/releases/0.4.0.md)).
+The current release is **`0.4.0`** (see its [release note](docs/releases/0.4.0.md)
+and the [changelog](CHANGELOG.md)). It changes how a host embeds the CPU; the
+changelog's **Breaking** section has the one-line migration.
 
 | Source | Status | Contents |
 | --- | --- | --- |
-| PyPI `0.3.0` | Published release | Complete validated core and inspection toolkit |
-| GitHub `v0.2.0` | Published milestone | RESET, CPU state, disassembly, and debugger foundations |
-| GitHub `v0.3.0` | Current release | API hardening and advanced trace diagnostics |
-| `main` `0.4.0.dev0` | In progress | Conformance kit, FUSE oracle, bus-transaction check, 2.5x speed |
+| PyPI and GitHub `v0.4.0` | Current release | Callable embedding contract, 2.5x speed, every handler cited, oracle tiers, bus-access tracking and watchpoints |
+| PyPI and GitHub `v0.3.0` | Previous release | API hardening and advanced trace diagnostics |
+| GitHub `v0.2.0` | Milestone | RESET, CPU state, disassembly, and debugger foundations |
 
 ### Install from PyPI
 
