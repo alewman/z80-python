@@ -93,9 +93,6 @@ class CoreMixin:
         self.sp = (self.sp + 1) & 0xFFFF
         return (high << 8) | low
 
-    def _can_accept_maskable_interrupt(self) -> bool:
-        return self.iff1 and self._ei_delay == 0 and self._pending_maskable_interrupt is not None
-
     def _accept_reset(self) -> int:
         """Apply the RESET-visible CPU state while the host holds RESET asserted."""
 
