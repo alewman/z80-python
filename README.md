@@ -61,7 +61,7 @@ separated rather than implied:
 
 | Badge | Runs | When |
 | --- | --- | --- |
-| **CI** | unit and integration suite, Ruff, the example host, a wheel build and installed-API smoke test, on Python 3.11/3.12/3.13; plus the FUSE oracle | every push and pull request |
+| **CI** | unit and integration suite, Ruff, the example host, a wheel build and installed-API smoke test, on CPython 3.12/3.13/3.14 and PyPy 3.11; plus the FUSE oracle | every push and pull request |
 | **Oracles** | SingleStepTests (1,604 files, 1,604,000 cases), z80test (`z80full`, `z80ccf`, `z80memptr`), FUSE, and the superzazu/z80 interrupt cross-check, each against its pinned corpus | weekly, and on demand |
 
 **ZEXDOC and ZEXALL are certified locally, not in CI.** They need

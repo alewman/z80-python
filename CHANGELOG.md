@@ -9,6 +9,13 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ## [Unreleased] — 0.4.0.dev0
 
+### Changed
+
+- **CPython 3.11 is no longer tested.** CI runs CPython 3.12, 3.13 and 3.14
+  and PyPy 3.11 (CI never ran PyPy before). `requires-python` stays
+  `>=3.11` because PyPy's newest release is Python 3.11; the floor follows
+  PyPy and rises when PyPy supports 3.12.
+
 ### Added
 
 - **Memory bus transaction certification.** `VectorCPU` records every
