@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "name": "zexdoc",
+  "host": "cpm-minimal",
+  "memory": [
+    {"address": 6, "data": "00f0"},
+    {"address": 256, "file": "zexdoc.com"}
+  ],
+  "initial": {"pc": 256, "sp": 61440},
+  "stop": {"max_steps": 10000000000, "on_halt": true}
+}

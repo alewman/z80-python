@@ -16,28 +16,21 @@ from z80_python import Z80CPU
 
 
 class BenchmarkCPU(Z80CPU):
-    """Flat-memory benchmark host with deterministic bytearray-backed I/O."""
+    """Flat-memory benchmark host: bytearrays wired straight in as both buses."""
 
     def __init__(self, program: bytes) -> None:
-        super().__init__()
         self.memory = bytearray(0x10000)
         self.ports = bytearray(0x10000)
         self.memory[: len(program)] = program
         for offset in range(0x100):
             self.memory[0x5000 + offset] = (offset * 17 + 3) & 0xFF
             self.ports[0x2000 + offset] = (offset * 29 + 5) & 0xFF
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return self.ports[addr & 0xFFFF]
-
-    def write_port(self, addr: int, value: int) -> None:
-        self.ports[addr & 0xFFFF] = value & 0xFF
+        super().__init__(
+            self.memory.__getitem__,
+            self.memory.__setitem__,
+            read_port=self.ports.__getitem__,
+            write_port=self.ports.__setitem__,
+        )
 
 
 @dataclass(frozen=True)

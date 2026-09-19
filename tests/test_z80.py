@@ -9,18 +9,13 @@ runs *every* case inside that test:
 
 * cases are loaded with :func:`validation.vector_utils.load_json_vector`;
 * each case is executed with :func:`validation.vector_utils.run_test_case` (which
-    raises :class:`validation.vector_utils.OpcodeNotImplementedError`, a
+  raises :class:`validation.vector_utils.OpcodeNotImplementedError`, a
   ``NotImplementedError`` subclass, for opcodes the CPU does not implement
   yet) and the observed state is compared exactly with
-  :func:`z80_test_utils.assert_state_equal`;
+  :func:`validation.vector_utils.assert_state_equal`;
 * a caught ``NotImplementedError`` is reported with ``pytest.fail`` and an
   ``"Opcode not implemented: ..."`` message -- an unimplemented opcode is a
   red test until the CPU implements it, never a silent skip.
-
-If ``validation.vector_utils`` cannot be imported, a compact inline fallback that
-duplicates ``load_json_vector`` / ``run_test_case`` / ``assert_state_equal``
-(plus the ``OpcodeNotImplementedError`` type) is used instead, so the runner
-keeps working standalone.
 
 Per-opcode pass/fail/not-implemented counts are recorded in the
 session-scoped ``vector_results`` fixture provided by ``tests/conftest.py``;
@@ -32,165 +27,16 @@ as failed.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-try:
-    from validation.vector_utils import (
-        OpcodeNotImplementedError,
-        assert_state_equal,
-        expected_state,
-        load_json_vector,
-        run_test_case,
-    )
-except ImportError:  # pragma: no cover - inline fallback (see module docstring)
-    from z80_python import Z80CPU
-
-    #: Vector fields that map 1:1 onto Z80CPU attributes (fallback copy).
-    REGISTER_FIELDS = (
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "h",
-        "l",
-        "i",
-        "r",
-        "ix",
-        "iy",
-        "sp",
-        "pc",
-        "wz",
-        "af_",
-        "bc_",
-        "de_",
-        "hl_",
-        "im",
-        "iff1",
-        "iff2",
-        "q",
-    )
-
-    class OpcodeNotImplementedError(NotImplementedError):
-        """Fallback twin of ``z80_test_utils.OpcodeNotImplementedError``."""
-
-    class _VectorCPU(Z80CPU):
-        """Concrete Z80CPU backed by a flat 64 KiB bytearray (fallback)."""
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.memory = bytearray(0x10000)
-            self.port_inputs: list[tuple[int, int]] = []
-            self.port_outputs: list[tuple[int, int]] = []
-
-        def read_byte(self, addr: int) -> int:
-            return self.memory[addr & 0xFFFF]
-
-        def write_byte(self, addr: int, value: int) -> None:
-            self.memory[addr & 0xFFFF] = value & 0xFF
-
-        def read_port(self, addr: int) -> int:
-            if not self.port_inputs:
-                raise AssertionError(
-                    f"unexpected I/O port read at 0x{addr & 0xFFFF:04X}: "
-                    "the vector provides no port input for this instruction"
-                )
-            expected_addr, value = self.port_inputs.pop(0)
-            if expected_addr != addr & 0xFFFF:
-                raise AssertionError(
-                    f"I/O port read address mismatch: expected 0x{expected_addr:04X} "
-                    f"(vector order), CPU read 0x{addr & 0xFFFF:04X}"
-                )
-            return value
-
-        def write_port(self, addr: int, value: int) -> None:
-            self.port_outputs.append((addr & 0xFFFF, value & 0xFF))
-
-    def load_json_vector(file_path: str | Path) -> list[dict]:
-        """Fallback loader: parse a JSON list of test-case dicts."""
-        path = Path(file_path)
-        with path.open(encoding="utf-8") as handle:
-            data = json.load(handle)
-        if not isinstance(data, list) or not data:
-            raise ValueError(f"{path}: expected a non-empty list of test cases")
-        return data
-
-    def _setup_cpu(initial: dict) -> _VectorCPU:
-        cpu = _VectorCPU()
-        for field in REGISTER_FIELDS:
-            value = initial[field]
-            if field == "f":
-                cpu.f.byte = value
-            else:
-                setattr(cpu, field, value)
-        for addr, value in initial.get("ram", []):
-            cpu.write_byte(addr, value)
-        return cpu
-
-    def _snapshot(cpu: _VectorCPU, final: dict) -> dict:
-        state = {
-            field: (cpu.f.byte if field == "f" else getattr(cpu, field))
-            for field in REGISTER_FIELDS
-        }
-        state["ram"] = [[addr, cpu.read_byte(addr)] for addr, _ in final.get("ram", [])]
-        return state
-
-    def _fallback_opcode_and_pc(initial: dict) -> tuple[int | None, int | None]:
-        """Fallback twin of ``z80_test_utils._opcode_and_pc``."""
-        pc = initial.get("pc")
-        if not isinstance(pc, int):
-            return None, None
-        ram = dict(initial.get("ram", []))
-        return ram.get(pc), pc
-
-    def run_test_case(case: dict) -> dict:
-        """Fallback runner: execute one vector case and snapshot the result."""
-        cpu = _setup_cpu(case["initial"])
-        try:
-            t_states = cpu.step()
-        except NotImplementedError as exc:
-            opcode, pc = _fallback_opcode_and_pc(case["initial"])
-            location = f" at PC 0x{pc:04X}" if pc is not None else ""
-            opcode_text = f"0x{opcode:02X}" if opcode is not None else "?"
-            raise OpcodeNotImplementedError(
-                f"opcode {opcode_text}{location} is not implemented ({exc})"
-            ) from exc
-        state = _snapshot(cpu, case["final"])
-        state["t_states"] = t_states
-        return state
-
-    def expected_state(case: dict) -> dict:
-        """Fallback twin of ``vector_utils.expected_state``: final + T-states."""
-        expected = dict(case["final"])
-        if isinstance(case.get("cycles"), list):
-            expected["t_states"] = len(case["cycles"])
-        return expected
-
-    def assert_state_equal(expected: dict, actual: dict) -> None:
-        """Fallback comparator: report register/RAM/T-state mismatches."""
-        diffs = [
-            f"  register {field}: expected {expected[field]!r}, got {actual.get(field)!r}"
-            for field in REGISTER_FIELDS
-            if field in expected and expected[field] != actual.get(field)
-        ]
-        if "t_states" in expected and expected["t_states"] != actual.get("t_states"):
-            diffs.append(
-                f"  t_states: expected {expected['t_states']}, got {actual.get('t_states')}"
-            )
-        expected_ram = expected.get("ram", [])
-        actual_ram = dict(actual.get("ram", []))
-        for addr, value in expected_ram:
-            if actual_ram.get(addr) != value:
-                diffs.append(
-                    f"  ram[0x{addr:04X}]: expected {value!r}, got {actual_ram.get(addr)!r}"
-                )
-        if diffs:
-            raise AssertionError("state mismatch:\n" + "\n".join(diffs))
-
+from validation.vector_utils import (
+    assert_state_equal,
+    expected_state,
+    load_json_vector,
+    run_test_case,
+)
 
 #: Directory holding the per-opcode vector JSON files (SingleStepTests/z80
 #: layout: every opcode/prefixed variant is one file under ``v1/``).

@@ -1,6 +1,7 @@
 """Unit tests for the Z80 CPU skeleton (src/z80_python/)."""
 
 import pytest
+from conftest import MemoryCPU
 
 from z80_python.cpu import (
     FLAG_C,
@@ -14,26 +15,6 @@ from z80_python.cpu import (
     Z80CPU,
     Flags,
 )
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by a flat 64 KiB bytearray."""
-
-    def __init__(self, memory: bytes = bytes(0x10000)) -> None:
-        super().__init__()
-        self.memory = bytearray(memory)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        raise NotImplementedError("test MemoryCPU does not model I/O ports")
-
-    def write_port(self, addr: int, value: int) -> None:
-        raise NotImplementedError("test MemoryCPU does not model I/O ports")
 
 
 def test_all_registers_initialized_to_zero() -> None:
@@ -52,9 +33,9 @@ def test_all_registers_initialized_to_zero() -> None:
     assert cpu.im == 0
 
 
-def test_z80cpu_is_abstract() -> None:
+def test_z80cpu_requires_the_memory_bus() -> None:
     with pytest.raises(TypeError):
-        Z80CPU()  # type: ignore[abstract]
+        Z80CPU()  # type: ignore[call-arg]
 
 
 def test_flag_constants_cover_all_f_bits() -> None:
@@ -135,12 +116,11 @@ def test_halt_sets_halted_flag_and_leaves_state_untouched() -> None:
     assert cpu.q == 0  # HALT does not write F, so Q is cleared
 
 
-def test_q_tracking_latches_f_or_clears() -> None:
-    cpu = MemoryCPU()
-    cpu.f.byte = 0b1011_0101
-    cpu._update_q(True)
-    assert cpu.q == 0b1011_0101
-    cpu._update_q(False)
+def test_q_latches_f_after_a_flag_write_and_clears_after_anything_else() -> None:
+    cpu = MemoryCPU(bytes((0xAF, 0x00)) + bytes(0x10000 - 2))  # XOR A; NOP
+    cpu.step()
+    assert cpu.q == cpu.f.byte == 0x44  # Z and PV
+    cpu.step()
     assert cpu.q == 0
 
 

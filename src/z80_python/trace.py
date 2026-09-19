@@ -62,7 +62,10 @@ class TraceDivergence:
 
 
 def compare_step_records(left: StepRecord, right: StepRecord) -> tuple[TraceDifference, ...]:
-    """Compare two aligned records while deliberately ignoring session sequence IDs."""
+    """Compare two aligned records while deliberately ignoring session sequence IDs.
+
+    Bus accesses are compared only when both records carry them.
+    """
 
     if type(left) is not StepRecord or type(right) is not StepRecord:
         raise TypeError("left and right must be StepRecord values")
@@ -73,6 +76,12 @@ def compare_step_records(left: StepRecord, right: StepRecord) -> tuple[TraceDiff
     _append(differences, "t_states", left.t_states, right.t_states)
     _compare_state(differences, "before", left.before, right.before)
     _compare_state(differences, "after", left.after, right.after)
+    if left.accesses is not None and right.accesses is not None:
+        # Absent means "not recorded", not "no accesses": compare only when both
+        # sides tracked them.
+        _append(
+            differences, "accesses", _access_texts(left.accesses), _access_texts(right.accesses)
+        )
     return tuple(differences)
 
 
@@ -146,7 +155,7 @@ def step_record_to_dict(record: StepRecord) -> dict[str, object]:
     if type(record) is not StepRecord:
         raise TypeError("record must be a StepRecord")
     instruction = record.instruction
-    return {
+    encoded: dict[str, object] = {
         "version": TRACE_SCHEMA_VERSION,
         "sequence": record.sequence,
         "kind": record.kind.value,
@@ -162,17 +171,17 @@ def step_record_to_dict(record: StepRecord) -> dict[str, object]:
         "before": _state_to_dict(record.before),
         "after": _state_to_dict(record.after),
     }
+    if record.accesses is not None:
+        encoded["accesses"] = [list(access) for access in record.accesses]
+    return encoded
 
 
 def step_record_from_dict(value: object) -> StepRecord:
     """Reconstruct one strictly validated record from its versioned representation."""
 
     root = _require_object(value, "record")
-    _require_keys(
-        root,
-        "record",
-        {"version", "sequence", "kind", "t_states", "instruction", "before", "after"},
-    )
+    required = {"version", "sequence", "kind", "t_states", "instruction", "before", "after"}
+    _require_keys(root, "record", required | ({"accesses"} & set(root)))
     version = root["version"]
     if type(version) is not int or version != TRACE_SCHEMA_VERSION:
         raise ValueError(f"unsupported trace schema version: {version!r}")
@@ -199,6 +208,7 @@ def step_record_from_dict(value: object) -> StepRecord:
         after=_state_from_dict(root["after"], "after"),
         t_states=t_states,
         instruction=_instruction_from_dict(root["instruction"]),
+        accesses=_accesses_from_list(root["accesses"]) if "accesses" in root else None,
     )
 
 
@@ -270,6 +280,18 @@ def _compare_instruction(
     _append(differences, "instruction.data", left.data.hex(), right.data.hex())
     _append(differences, "instruction.mnemonic", left.mnemonic, right.mnemonic)
     _append(differences, "instruction.operands", left.operands, right.operands)
+
+
+def _access_texts(accesses: tuple[tuple[str, int, int], ...]) -> tuple[str, ...]:
+    return tuple(f"{kind} {address:04X}={value:02X}" for kind, address, value in accesses)
+
+
+def _accesses_from_list(value: object) -> tuple[tuple[str, int, int], ...]:
+    if type(value) is not list or not all(
+        type(item) is list and len(item) == 3 and type(item[0]) is str for item in value
+    ):
+        raise ValueError("accesses must be a list of [kind, address, value] entries")
+    return tuple((kind, address, data) for kind, address, data in value)
 
 
 def _state_to_dict(state: CPUState) -> dict[str, int | bool | None]:

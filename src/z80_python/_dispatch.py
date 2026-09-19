@@ -1,204 +1,188 @@
-"""Top-level, base, CB, and ED opcode dispatch."""
+"""Opcode dispatch: which handler runs for each byte of each opcode page.
+
+The Z80 decodes five pages of 256 opcodes: the main page, and the pages after
+the CB, ED, DD/FD and DD CB/FD CB prefixes. Each page is a 256-entry table
+built once per class from the rules below, so that executing an instruction
+is one list index and one call. The table is data; the handlers are code.
+Every entry names an ``_op_*`` method, so grepping a mnemonic still lands on
+the method that implements it, and on its docstring.
+
+A rule is ``(opcodes, handler, argument)``. ``argument`` is what the handler
+is called with: ``OPCODE`` means the opcode byte itself, ``None`` means no
+argument, and anything else is passed as it is. Main, CB and ED handlers
+return the instruction's whole T-state total, prefix fetches included. The
+DD/FD page and its rules are in ``_index_dispatch.py``, beside the
+specification of prefix runs.
+"""
+
+from collections.abc import Iterable
+
+#: "Call the handler with the opcode byte": the handler decodes its own fields.
+OPCODE = object()
+
+Rule = tuple[Iterable[int], str, object]
+
+
+def every8(first: int) -> range:
+    """The eight opcodes ``first``, ``first + 8``, ... that differ only in bits 5-3."""
+    return range(first, first + 0x40, 8)
+
+
+# Main page. Bits 5-3 of an opcode select a register (B C D E H L (HL) A) or
+# a condition (NZ Z NC C PO PE P M); bits 5-4 select a pair (BC DE HL SP).
+MAIN_RULES: tuple[Rule, ...] = (
+    ((0x00,), "_op_nop", None),
+    ((0x01, 0x11, 0x21, 0x31), "_op_ld_rr_nn", OPCODE),
+    ((0x02, 0x12), "_op_ld_irr_a", OPCODE),
+    ((0x03, 0x13, 0x23, 0x33), "_op_inc_rr", OPCODE),
+    ([op for op in every8(0x04) if op != 0x34], "_op_inc_r", OPCODE),
+    ([op for op in every8(0x05) if op != 0x35], "_op_dec_r", OPCODE),
+    (every8(0x06), "_op_ld_r_n", OPCODE),
+    ((0x07,), "_op_rlca", None),
+    ((0x08,), "_op_ex_af_af", None),
+    ((0x09, 0x19, 0x29, 0x39), "_op_add_hl_rr", OPCODE),
+    ((0x0A, 0x1A), "_op_ld_a_irr", OPCODE),
+    ((0x0B, 0x1B, 0x2B, 0x3B), "_op_dec_rr", OPCODE),
+    ((0x0F,), "_op_rrca", None),
+    ((0x10,), "_op_djnz", None),
+    ((0x17,), "_op_rla", None),
+    ((0x18, 0x20, 0x28, 0x30, 0x38), "_op_jr", OPCODE),
+    ((0x1F,), "_op_rra", None),
+    ((0x22,), "_op_ld_nn_hl", None),
+    ((0x27,), "_op_daa", None),
+    ((0x2A,), "_op_ld_hl_nn_from_mem", None),
+    ((0x2F,), "_op_cpl", None),
+    ((0x32,), "_op_ld_inn_a", None),
+    ((0x34,), "_op_inc_hl", None),
+    ((0x35,), "_op_dec_hl", None),
+    ((0x37, 0x3F), "_op_scf_ccf", OPCODE),
+    ((0x3A,), "_op_ld_a_inn", None),
+    ([op for op in range(0x40, 0x80) if op != 0x76], "_op_ld_r_r", OPCODE),
+    ((0x76,), "_op_halt", None),
+    (range(0x80, 0xC0), "_op_alu_r", OPCODE),
+    (every8(0xC0), "_op_ret_cc", OPCODE),
+    ((0xC1, 0xD1, 0xE1), "_op_pop_rr", OPCODE),
+    ((*every8(0xC2), 0xC3), "_op_jp", OPCODE),
+    ((*every8(0xC4), 0xCD), "_op_call", OPCODE),
+    ((0xC5, 0xD5, 0xE5), "_op_push_rr", OPCODE),
+    (every8(0xC6), "_op_alu_n", OPCODE),
+    (every8(0xC7), "_op_rst", OPCODE),
+    ((0xC9,), "_op_ret", None),
+    ((0xCB,), "_execute_cb", None),
+    ((0xD3,), "_op_out_n_a", None),
+    ((0xD9,), "_op_exx", None),
+    ((0xDB,), "_op_in_a_n", None),
+    ((0xDD, 0xFD), "_execute_index", OPCODE),
+    ((0xE3,), "_op_ex_sp_hl", None),
+    ((0xE9,), "_op_jp_hl", None),
+    ((0xEB,), "_op_ex_de_hl", None),
+    ((0xED,), "_execute_ed", None),
+    ((0xF1,), "_op_pop_af", None),
+    ((0xF3,), "_op_interrupt_enable", False),
+    ((0xF5,), "_op_push_af", None),
+    ((0xF9,), "_op_ld_sp_hl", None),
+    ((0xFB,), "_op_interrupt_enable", True),
+)
+
+# CB page: bits 7-6 pick the group, bits 5-3 the operation or bit number,
+# bits 2-0 the register.
+CB_RULES: tuple[Rule, ...] = (
+    (range(0x00, 0x40), "_op_rot", OPCODE),
+    (range(0x40, 0x80), "_op_bit", OPCODE),
+    (range(0x80, 0xC0), "_op_res", OPCODE),
+    (range(0xC0, 0x100), "_op_set", OPCODE),
+)
+
+# ED page. Every byte not listed is a genuine instruction on real silicon: a
+# two-byte, 8-T-state no-op. Hence the default below.
+ED_DEFAULT = ("_op_ed_nop", None)
+ED_RULES: tuple[Rule, ...] = (
+    (every8(0x40), "_op_in_r_c", OPCODE),
+    (every8(0x41), "_op_out_c_r", OPCODE),
+    ((0x42, 0x52, 0x62, 0x72), "_op_sbc_hl_rr", OPCODE),
+    ((0x4A, 0x5A, 0x6A, 0x7A), "_op_adc_hl_rr", OPCODE),
+    *(((0x43 | pair << 4,), "_op_ld_nn_rr", pair) for pair in range(4)),
+    *(((0x4B | pair << 4,), "_op_ld_rr_nn_from_mem", pair) for pair in range(4)),
+    (every8(0x44), "_op_neg", None),
+    ((0x45, 0x55, 0x65, 0x75), "_op_retn", None),
+    ((0x4D, 0x5D, 0x6D, 0x7D), "_op_reti", None),
+    ((0x46, 0x4E, 0x66, 0x6E), "_op_im", 0),
+    ((0x56, 0x76), "_op_im", 1),
+    ((0x5E, 0x7E), "_op_im", 2),
+    ((0x47,), "_op_ld_i_a", None),
+    ((0x4F,), "_op_ld_r_a", None),
+    ((0x57,), "_op_ld_a_i", None),
+    ((0x5F,), "_op_ld_a_r", None),
+    ((0x67,), "_op_rrd", None),
+    ((0x6F,), "_op_rld", None),
+    ((0xA0,), "_op_ldi", None),
+    ((0xA1,), "_op_cpi", None),
+    ((0xA2,), "_op_ini", None),
+    ((0xA3,), "_op_outi", None),
+    ((0xA8,), "_op_ldd", None),
+    ((0xA9,), "_op_cpd", None),
+    ((0xAA,), "_op_ind", None),
+    ((0xAB,), "_op_outd", None),
+    ((0xB0,), "_op_ldir", None),
+    ((0xB1,), "_op_cpir", None),
+    ((0xB2,), "_op_inir", None),
+    ((0xB3,), "_op_otir", None),
+    ((0xB8,), "_op_lddr", None),
+    ((0xB9,), "_op_cpdr", None),
+    ((0xBA,), "_op_indr", None),
+    ((0xBB,), "_op_otdr", None),
+)
+
+
+def build_page(
+    cls: type,
+    rules: Iterable[tuple],
+    *,
+    default: tuple[str, object] | None = None,
+    unassigned: Iterable[int] = (),
+) -> list:
+    """Return the 256 entries of one page of ``cls`` from its rules.
+
+    An entry is ``(handler, argument)``, followed by any further columns the
+    rule carries. Each opcode must be claimed by exactly one rule (or fall to
+    ``default``), except those in ``unassigned``, which the page's executor
+    handles before it looks in the table; their entries are ``None``.
+    """
+    page: list = [None] * 256
+    for opcodes, name, argument, *columns in rules:
+        handler = getattr(cls, name)
+        for opcode in opcodes:
+            if page[opcode] is not None:
+                raise ValueError(f"{name}: opcode 0x{opcode:02X} is claimed twice")
+            page[opcode] = (handler, opcode if argument is OPCODE else argument, *columns)
+    if default is not None:
+        name, argument = default
+        handler = getattr(cls, name)
+        for opcode in range(256):
+            if page[opcode] is None and opcode not in unassigned:
+                page[opcode] = (handler, argument)
+    missing = [op for op in range(256) if page[op] is None and op not in unassigned]
+    if missing:
+        raise ValueError("unassigned opcodes: " + " ".join(f"{op:02X}" for op in missing))
+    return page
 
 
 class DispatchMixin:
-    """Private instruction fetch and dispatch implementation."""
+    """Private instruction fetch and dispatch for the main, CB and ED pages."""
 
     def decode_and_execute(self) -> int:
-        opcode = self._fetch_byte()
-        if opcode == 0xCB:
-            return self._execute_cb(self._fetch_byte())
-        if opcode == 0xED:
-            return self._execute_ed(self._fetch_byte())
-        if opcode in (0xDD, 0xFD):
-            return self._execute_index(opcode, self._fetch_byte())
-        return self._execute_main(opcode)
+        """Fetch and execute one instruction, ignoring pending interrupts; return T-states."""
+        handler, argument = self._main_page[self._fetch_byte()]
+        if argument is None:
+            return handler(self)
+        return handler(self, argument)
 
-    def _execute_cb(self, sub_opcode: int) -> int:
-        if sub_opcode <= 0x3F:
-            return self._op_rot(sub_opcode)
-        if sub_opcode <= 0x7F:
-            return self._op_bit(sub_opcode)
-        if sub_opcode <= 0xBF:
-            return self._op_res(sub_opcode)
-        return self._op_set(sub_opcode)
+    def _execute_cb(self) -> int:
+        handler, sub_opcode = self._cb_page[self._fetch_byte()]
+        return handler(self, sub_opcode)
 
-    def _execute_main(self, opcode: int) -> int:
-        if opcode == 0x00:
-            return self._op_nop()
-        if opcode in (0x01, 0x11, 0x21, 0x31):
-            return self._op_ld_rr_nn(opcode)
-        if opcode == 0x08:
-            return self._op_ex_af_af()
-        if opcode == 0x10:
-            return self._op_djnz()
-        if opcode == 0x76:
-            return self._op_halt()
-        if 0x40 <= opcode <= 0x7F and opcode != 0x76:
-            return self._op_ld_r_r(opcode)
-        if opcode in (0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x36, 0x3E):
-            return self._op_ld_r_n(opcode)
-        if opcode in (0x0A, 0x1A):
-            return self._op_ld_a_irr(self._bc() if opcode == 0x0A else self._de())
-        if opcode in (0x02, 0x12):
-            return self._op_ld_irr_a(self._bc() if opcode == 0x02 else self._de())
-        if opcode == 0x3A:
-            return self._op_ld_a_inn()
-        if opcode == 0x32:
-            return self._op_ld_inn_a()
-        if opcode in (0x37, 0x3F):
-            return self._op_scf_ccf(opcode, prefixed=False)
-        if opcode == 0x22:
-            return self._op_ld_nn_hl()
-        if opcode == 0x2A:
-            return self._op_ld_hl_nn_from_mem()
-        if opcode == 0xDB:
-            return self._op_in_a_n()
-        if opcode == 0xD3:
-            return self._op_out_n_a()
-        if 0x80 <= opcode <= 0xBF:
-            return self._op_alu_r(opcode)
-        if opcode in (0xC6, 0xCE, 0xD6, 0xDE, 0xE6, 0xEE, 0xF6, 0xFE):
-            return self._op_alu_n(opcode)
-        if opcode in (0x04, 0x0C, 0x14, 0x1C, 0x24, 0x2C, 0x3C):
-            return self._op_inc_r(opcode)
-        if opcode in (0x05, 0x0D, 0x15, 0x1D, 0x25, 0x2D, 0x3D):
-            return self._op_dec_r(opcode)
-        if opcode == 0x34:
-            return self._op_inc_hl()
-        if opcode == 0x35:
-            return self._op_dec_hl()
-        if opcode == 0x27:
-            return self._op_daa()
-        if opcode == 0x2F:
-            return self._op_cpl()
-        if opcode == 0x07:
-            return self._op_rlca()
-        if opcode == 0x0F:
-            return self._op_rrca()
-        if opcode == 0x17:
-            return self._op_rla()
-        if opcode == 0x1F:
-            return self._op_rra()
-        if opcode in (0x09, 0x19, 0x29, 0x39):
-            return self._op_add_hl_rr(opcode)
-        if opcode in (0x03, 0x13, 0x23, 0x33):
-            return self._op_inc_rr(opcode)
-        if opcode in (0x0B, 0x1B, 0x2B, 0x3B):
-            return self._op_dec_rr(opcode)
-        if opcode in (0x18, 0x20, 0x28, 0x30, 0x38):
-            return self._op_jr(opcode)
-        if opcode in (0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0, 0xF8):
-            return self._op_ret_cc(opcode)
-        if opcode == 0xC9:
-            return self._op_ret()
-        if opcode in (0xC2, 0xCA, 0xD2, 0xDA, 0xE2, 0xEA, 0xF2, 0xFA, 0xC3):
-            return self._op_jp(opcode)
-        if opcode in (0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC, 0xCD):
-            return self._op_call(opcode)
-        if opcode in (0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF):
-            return self._op_rst(opcode)
-        if opcode in (0xC1, 0xD1, 0xE1):
-            return self._op_pop_rr(opcode)
-        if opcode in (0xC5, 0xD5, 0xE5):
-            return self._op_push_rr(opcode)
-        if opcode == 0xF1:
-            return self._op_pop_af()
-        if opcode == 0xF5:
-            return self._op_push_af()
-        if opcode == 0xF9:
-            return self._op_ld_sp_hl()
-        if opcode == 0xD9:
-            return self._op_exx()
-        if opcode == 0xE3:
-            return self._op_ex_sp_hl()
-        if opcode == 0xE9:
-            return self._op_jp_hl()
-        if opcode == 0xEB:
-            return self._op_ex_de_hl()
-        if opcode == 0xF3:
-            return self._op_interrupt_enable(False)
-        if opcode == 0xFB:
-            return self._op_interrupt_enable(True)
-        raise NotImplementedError(
-            f"unhandled opcode 0x{opcode:02X} at PC 0x{(self.pc - 1) & 0xFFFF:04X}"
-        )
-
-    def _execute_ed(self, opcode: int) -> int:
-        # Explicit dispatch avoids rebuilding a dictionary of bound methods on
-        # every ED instruction while keeping each opcode directly traceable.
-        match opcode:
-            case 0x47:
-                return self._op_ld_i_a()
-            case 0x4F:
-                return self._op_ld_r_a()
-            case 0x57:
-                return self._op_ld_a_i()
-            case 0x5F:
-                return self._op_ld_a_r()
-            case 0x67:
-                return self._op_rrd()
-            case 0x6F:
-                return self._op_rld()
-            case 0x77 | 0x7F:
-                return self._op_ed_nop()
-            case 0xA0:
-                return self._op_ldi()
-            case 0xA1:
-                return self._op_cpi()
-            case 0xA2:
-                return self._op_ini()
-            case 0xA3:
-                return self._op_outi()
-            case 0xA8:
-                return self._op_ldd()
-            case 0xA9:
-                return self._op_cpd()
-            case 0xAA:
-                return self._op_ind()
-            case 0xAB:
-                return self._op_outd()
-            case 0xB0:
-                return self._op_ldir()
-            case 0xB1:
-                return self._op_cpir()
-            case 0xB2:
-                return self._op_inir()
-            case 0xB3:
-                return self._op_otir()
-            case 0xB8:
-                return self._op_lddr()
-            case 0xB9:
-                return self._op_cpdr()
-            case 0xBA:
-                return self._op_indr()
-            case 0xBB:
-                return self._op_otdr()
-        if opcode in (0x45, 0x55, 0x65, 0x75):
-            return self._op_retn()
-        if opcode in (0x4D, 0x5D, 0x6D, 0x7D):
-            return self._op_reti()
-        if opcode in (0x4A, 0x5A, 0x6A, 0x7A):
-            return self._op_adc_hl_rr(opcode)
-        if opcode in (0x42, 0x52, 0x62, 0x72):
-            return self._op_sbc_hl_rr(opcode)
-        if opcode in (0x43, 0x53, 0x63, 0x73):
-            return self._op_ld_nn_rr((opcode >> 4) & 0x03)
-        if opcode in (0x4B, 0x5B, 0x6B, 0x7B):
-            return self._op_ld_rr_nn_from_mem((opcode >> 4) & 0x03)
-        if opcode in (0x46, 0x4E, 0x66, 0x6E):
-            return self._op_im(0)
-        if opcode in (0x56, 0x76):
-            return self._op_im(1)
-        if opcode in (0x5E, 0x7E):
-            return self._op_im(2)
-        if opcode in (0x44, 0x4C, 0x54, 0x5C, 0x64, 0x6C, 0x74, 0x7C):
-            return self._op_neg()
-        if 0x40 <= opcode <= 0x78 and (opcode & 0x07) == 0:
-            return self._op_in_r_c(opcode)
-        if 0x41 <= opcode <= 0x79 and (opcode & 0x07) == 1:
-            return self._op_out_c_r(opcode)
-        # Every ED-prefixed byte not otherwise defined is a genuine Z80 instruction
-        # on real silicon: a 2-byte, 8 T-state no-op. Only 0x77/0x7F fell inside the
-        # documented 0x40-0x7F block; the rest of the ED space needs the same rule.
-        return self._op_ed_nop()
+    def _execute_ed(self) -> int:
+        handler, argument = self._ed_page[self._fetch_byte()]
+        if argument is None:
+            return handler(self)
+        return handler(self, argument)

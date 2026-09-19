@@ -3,13 +3,13 @@
 from io import StringIO
 
 import pytest
+from conftest import MemoryCPU
 
-from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import CommandDebugger, CommandError, CommandResult, DebugSession
 
 
-def _debugger(program: bytes = bytes((0x00, 0x00, 0x00))) -> tuple[MinimalZ80Host, CommandDebugger]:
-    cpu = MinimalZ80Host()
+def _debugger(program: bytes = bytes((0x00, 0x00, 0x00))) -> tuple[MemoryCPU, CommandDebugger]:
+    cpu = MemoryCPU()
     cpu.memory[: len(program)] = program
     session = DebugSession(cpu, peek_byte=cpu.memory.__getitem__, history_limit=16)
     return cpu, CommandDebugger(session)
@@ -53,7 +53,7 @@ def test_disassembly_and_memory_wrap_and_remain_bounded() -> None:
 
 
 def test_commands_requiring_peek_fail_explicitly_when_capability_is_absent() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     debugger = CommandDebugger(DebugSession(cpu))
 
     with pytest.raises(CommandError, match="no side-effect-free peek"):

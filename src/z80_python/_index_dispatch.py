@@ -3,8 +3,9 @@
 A DD or FD prefix is its own M1 fetch on real hardware: it costs 4 T-states and
 bumps R before the opcode after it is fetched. Base-set opcodes that the prefix
 does not modify therefore run their ordinary handler and add that 4 here; the
-handlers that take a ``prefix`` argument already include the prefix cost in
-their documented totals.
+handlers that take a ``prefix`` argument return their documented totals, which
+already include it. The prefix M1 also writes no flags, so Q is 0 when the
+prefixed opcode runs; only SCF and CCF can see the difference.
 
 A DD or FD is not an instruction but a flag saying "use IX (or IY) instead of
 HL" for the opcode that follows. That is why a run of them is legal: each one
@@ -14,18 +15,116 @@ cannot touch. Sean Young, *The Undocumented Z80 Documented* v0.91, sections
 3.7 and 6.1; FUSE's ``ddfd00`` test case encodes the same costs.
 """
 
+from z80_python._dispatch import OPCODE, every8
+
+#: Registers a DD/FD prefix leaves alone: B C D E A. H, L and (HL) are the
+#: ones it replaces with IXH/IYH, IXL/IYL and (IX+d)/(IY+d).
+_PLAIN = (0, 1, 2, 3, 7)
+
+
+def _plain(opcodes: range, *, register_fields: tuple[int, ...]) -> list[int]:
+    """The opcodes whose register fields (at bit 0 and/or bit 3) all name plain registers."""
+    return [op for op in opcodes if all((op >> shift) & 7 in _PLAIN for shift in register_fields)]
+
+
+# A rule is (opcodes, handler, argument, prefixed). A prefixed handler names
+# an IX/IY operand (it lives in _index.py), is called with the prefix (0xDD or
+# 0xFD) before its argument, and returns its own total. Any other handler is
+# the base-set one, called as on the main page, plus the prefix's 4 T-states.
+INDEX_RULES = (
+    ((0x09, 0x19, 0x29, 0x39), "_op_add_index_rr", OPCODE, True),
+    ((0x21,), "_op_ld_index_nn", None, True),
+    ((0x22,), "_op_ld_nn_index", None, True),
+    ((0x23,), "_op_inc_index", None, True),
+    ((0x24, 0x25, 0x2C, 0x2D), "_op_inc_dec_index_byte", OPCODE, True),
+    ((0x26, 0x2E), "_op_ld_index_byte_n", OPCODE, True),
+    ((0x2A,), "_op_ld_index_nn_from_mem", None, True),
+    ((0x2B,), "_op_dec_index", None, True),
+    ((0x34,), "_op_inc_index_mem", None, True),
+    ((0x35,), "_op_dec_index_mem", None, True),
+    ((0x36,), "_op_ld_index_mem_n", None, True),
+    (
+        (0x44, 0x45, 0x4C, 0x4D, 0x54, 0x55, 0x5C, 0x5D, 0x7C, 0x7D),
+        "_op_ld_r_index_byte",
+        OPCODE,
+        True,
+    ),
+    ((0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E), "_op_ld_r_index_mem", OPCODE, True),
+    (_plain(range(0x60, 0x70), register_fields=(0,)), "_op_ld_index_byte_r", OPCODE, True),
+    ((0x64, 0x65, 0x6C, 0x6D), "_op_ld_index_byte_index_byte", OPCODE, True),
+    ((0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x77), "_op_ld_index_mem_r", OPCODE, True),
+    ([op for op in range(0x80, 0xC0) if op & 7 in (4, 5)], "_op_alu_index_byte", OPCODE, True),
+    (range(0x86, 0xC0, 8), "_op_alu_index_mem", OPCODE, True),
+    ((0xCB,), "_execute_index_cb", None, True),
+    ((0xE1,), "_op_pop_index", None, True),
+    ((0xE3,), "_op_ex_sp_index", None, True),
+    ((0xE5,), "_op_push_index", None, True),
+    ((0xE9,), "_op_jp_index", None, True),
+    ((0xF9,), "_op_ld_sp_index", None, True),
+    # Everything else ignores the prefix: the base-set handler, plus 4.
+    ((0x00,), "_op_nop", None, False),
+    ((0x01, 0x11, 0x31), "_op_ld_rr_nn", OPCODE, False),
+    ((0x02, 0x12), "_op_ld_irr_a", OPCODE, False),
+    ((0x03, 0x13, 0x33), "_op_inc_rr", OPCODE, False),
+    ((0x04, 0x0C, 0x14, 0x1C, 0x3C), "_op_inc_r", OPCODE, False),
+    ((0x05, 0x0D, 0x15, 0x1D, 0x3D), "_op_dec_r", OPCODE, False),
+    ((0x06, 0x0E, 0x16, 0x1E, 0x3E), "_op_ld_r_n", OPCODE, False),
+    ((0x07,), "_op_rlca", None, False),
+    ((0x08,), "_op_ex_af_af", None, False),
+    ((0x0A, 0x1A), "_op_ld_a_irr", OPCODE, False),
+    ((0x0B, 0x1B, 0x3B), "_op_dec_rr", OPCODE, False),
+    ((0x0F,), "_op_rrca", None, False),
+    ((0x10,), "_op_djnz", None, False),
+    ((0x17,), "_op_rla", None, False),
+    ((0x18, 0x20, 0x28, 0x30, 0x38), "_op_jr", OPCODE, False),
+    ((0x1F,), "_op_rra", None, False),
+    ((0x27,), "_op_daa", None, False),
+    ((0x2F,), "_op_cpl", None, False),
+    ((0x32,), "_op_ld_inn_a", None, False),
+    ((0x37, 0x3F), "_op_scf_ccf", OPCODE, False),
+    ((0x3A,), "_op_ld_a_inn", None, False),
+    (_plain(range(0x40, 0x80), register_fields=(0, 3)), "_op_ld_r_r", OPCODE, False),
+    ((0x76,), "_op_halt", None, False),
+    (_plain(range(0x80, 0xC0), register_fields=(0,)), "_op_alu_r", OPCODE, False),
+    (every8(0xC0), "_op_ret_cc", OPCODE, False),
+    ((0xC1, 0xD1), "_op_pop_rr", OPCODE, False),
+    ((*every8(0xC2), 0xC3), "_op_jp", OPCODE, False),
+    ((*every8(0xC4), 0xCD), "_op_call", OPCODE, False),
+    ((0xC5, 0xD5), "_op_push_rr", OPCODE, False),
+    (every8(0xC6), "_op_alu_n", OPCODE, False),
+    (every8(0xC7), "_op_rst", OPCODE, False),
+    ((0xC9,), "_op_ret", None, False),
+    ((0xD3,), "_op_out_n_a", None, False),
+    ((0xD9,), "_op_exx", None, False),
+    ((0xDB,), "_op_in_a_n", None, False),
+    ((0xEB,), "_op_ex_de_hl", None, False),
+    ((0xF1,), "_op_pop_af", None, False),
+    ((0xF3,), "_op_interrupt_enable", False, False),
+    ((0xF5,), "_op_push_af", None, False),
+    ((0xFB,), "_op_interrupt_enable", True, False),
+)
+
+# DD CB d op / FD CB d op: the operation is always on (IX+d)/(IY+d); bits 2-0
+# name a register that also receives the result (the undocumented forms).
+INDEX_CB_RULES = (
+    (range(0x00, 0x40), "_op_index_rot", OPCODE),
+    (range(0x40, 0x80), "_op_index_bit", OPCODE),
+    (range(0x80, 0x100), "_op_index_res_set", OPCODE),
+)
+
 
 class IndexDispatchMixin:
-    """Private dispatcher for currently implemented DD/FD opcodes."""
+    """Private dispatcher for the DD/FD and DD CB/FD CB pages."""
 
-    def _execute_index(self, prefix: int, sub_opcode: int) -> int:
+    def _execute_index(self, prefix: int) -> int:
+        sub_opcode = self._fetch_byte()
         stray_t_states = 0
-        while sub_opcode in (0xDD, 0xFD):
+        while sub_opcode == 0xDD or sub_opcode == 0xFD:
             # A DD or FD before another DD or FD is a stray prefix: its own M1
             # (4 T-states, R+1, already counted by _fetch_byte) and nothing else.
             # "In a large sequence of DD and FD bytes, it is the last one that
             # counts" (Young 3.7). No interrupt is accepted inside the run,
-            # because the run is one instruction to step() (Young, chapter 5).
+            # because the run is one instruction to step() (Young 5.5).
             prefix = sub_opcode
             sub_opcode = self._fetch_byte()
             stray_t_states += 4
@@ -33,265 +132,21 @@ class IndexDispatchMixin:
             # "If CB or ED is encountered, that byte plus the next make up an
             # instruction" (Young 3.7), and ED instructions never use the IX/IY
             # substitution (Young 3.2), so the DD/FD is a 4-T-state stray.
-            return stray_t_states + 4 + self._execute_ed(self._fetch_byte())
-        return stray_t_states + self._execute_index_opcode(prefix, sub_opcode)
+            return stray_t_states + 4 + self._execute_ed()
+        self.q = 0  # the prefix M1 wrote no flags
+        handler, argument, prefixed = self._index_page[sub_opcode]
+        if prefixed:
+            if argument is None:
+                return stray_t_states + handler(self, prefix)
+            return stray_t_states + handler(self, prefix, argument)
+        if argument is None:
+            return stray_t_states + handler(self) + 4
+        return stray_t_states + handler(self, argument) + 4
 
-    def _execute_index_opcode(self, prefix: int, sub_opcode: int) -> int:
-        if sub_opcode == 0xCB:
-            displacement = self._read_operand_byte()
-            # The final DDCB opcode byte is read as an operand, not an M1 fetch, so R
-            # advances only for the DD and CB prefixes.
-            cb_opcode = self._read_operand_byte()
-            if cb_opcode <= 0x3F:
-                return self._op_index_rot(prefix, displacement, cb_opcode)
-            if 0x40 <= cb_opcode <= 0x7F:
-                return self._op_index_bit(prefix, displacement, cb_opcode)
-            if 0x80 <= cb_opcode <= 0xBF:
-                return self._op_index_res_set(prefix, displacement, cb_opcode, set_bit=False)
-            if cb_opcode >= 0xC0:
-                return self._op_index_res_set(prefix, displacement, cb_opcode, set_bit=True)
-            prefix_addr = (self.pc - 4) & 0xFFFF
-            self.pc = (prefix_addr + 1) & 0xFFFF
-            raise NotImplementedError(
-                f"unhandled DDCB/FDCB opcode 0x{cb_opcode:02X} at PC 0x{prefix_addr:04X}"
-            )
-        if sub_opcode == 0x76:
-            return self._op_halt() + 4
-        if sub_opcode == 0x00:
-            return self._op_nop() + 4
-        if sub_opcode in (0x01, 0x11, 0x31):
-            return self._op_ld_rr_nn(sub_opcode) + 4
-        if sub_opcode == 0x08:
-            return self._op_ex_af_af() + 4
-        if sub_opcode == 0x10:
-            return self._op_djnz() + 4
-        if sub_opcode in (
-            0x40,
-            0x41,
-            0x42,
-            0x43,
-            0x47,
-            0x48,
-            0x49,
-            0x4A,
-            0x4B,
-            0x4F,
-            0x50,
-            0x51,
-            0x52,
-            0x53,
-            0x57,
-            0x58,
-            0x59,
-            0x5A,
-            0x5B,
-            0x5F,
-            0x78,
-            0x79,
-            0x7A,
-            0x7B,
-            0x7F,
-        ):
-            return self._op_ld_r_r(sub_opcode) + 4
-        if sub_opcode == 0x7C:
-            return self._op_ld_a_index_h(prefix) + 4
-        if sub_opcode == 0x7D:
-            return self._op_ld_a_index_l(prefix) + 4
-        if sub_opcode in (0x44, 0x45, 0x4C, 0x4D, 0x54, 0x55, 0x5C, 0x5D):
-            return self._op_ld_r_index_byte(prefix, sub_opcode) + 4
-        if sub_opcode in (0x64, 0x65, 0x6C, 0x6D):
-            return self._op_ld_index_byte_index_byte(prefix, sub_opcode) + 4
-        if sub_opcode in (0x60, 0x61, 0x62, 0x63, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6F):
-            return self._op_ld_index_byte_r(prefix, sub_opcode) + 4
-        if sub_opcode in (0x26, 0x2E):
-            return self._op_ld_index_byte_n(prefix, sub_opcode) + 4
-        if sub_opcode in (0x24, 0x25, 0x2C, 0x2D):
-            return self._op_inc_dec_index_byte(prefix, sub_opcode) + 4
-        if sub_opcode in (0x04, 0x0C, 0x14, 0x1C, 0x3C):
-            return self._op_inc_r(sub_opcode) + 4
-        if sub_opcode in (0x05, 0x0D, 0x15, 0x1D, 0x3D):
-            return self._op_dec_r(sub_opcode) + 4
-        if sub_opcode in (0x03, 0x13, 0x33):
-            return self._op_inc_rr(sub_opcode) + 4
-        if sub_opcode in (0x0B, 0x1B, 0x3B):
-            return self._op_dec_rr(sub_opcode) + 4
-        if sub_opcode in (0x06, 0x0E, 0x16, 0x1E, 0x3E):
-            return self._op_ld_r_n(sub_opcode) + 4
-        if sub_opcode in (0x0A, 0x1A):
-            return self._op_ld_a_irr(self._bc() if sub_opcode == 0x0A else self._de()) + 4
-        if sub_opcode in (0x02, 0x12):
-            return self._op_ld_irr_a(self._bc() if sub_opcode == 0x02 else self._de()) + 4
-        if sub_opcode == 0x3A:
-            return self._op_ld_a_inn() + 4
-        if sub_opcode == 0x32:
-            return self._op_ld_inn_a() + 4
-        if sub_opcode == 0xDB:
-            return self._op_in_a_n() + 4
-        if sub_opcode == 0xD3:
-            return self._op_out_n_a() + 4
-        if sub_opcode in (0x18, 0x20, 0x28, 0x30, 0x38):
-            return self._op_jr(sub_opcode) + 4
-        if sub_opcode == 0x27:
-            return self._op_daa() + 4
-        if sub_opcode == 0x2F:
-            return self._op_cpl() + 4
-        if sub_opcode in (0x37, 0x3F):
-            return self._op_scf_ccf(sub_opcode, prefixed=True) + 4
-        if sub_opcode == 0x07:
-            return self._op_rlca() + 4
-        if sub_opcode == 0x0F:
-            return self._op_rrca() + 4
-        if sub_opcode == 0x17:
-            return self._op_rla() + 4
-        if sub_opcode == 0x1F:
-            return self._op_rra() + 4
-
-        plain_alu = {
-            0x80,
-            0x81,
-            0x82,
-            0x83,
-            0x87,
-            0x88,
-            0x89,
-            0x8A,
-            0x8B,
-            0x8F,
-            0x90,
-            0x91,
-            0x92,
-            0x93,
-            0x97,
-            0x98,
-            0x99,
-            0x9A,
-            0x9B,
-            0x9F,
-            0xA0,
-            0xA1,
-            0xA2,
-            0xA3,
-            0xA7,
-            0xA8,
-            0xA9,
-            0xAA,
-            0xAB,
-            0xAF,
-            0xB0,
-            0xB1,
-            0xB2,
-            0xB3,
-            0xB7,
-            0xB8,
-            0xB9,
-            0xBA,
-            0xBB,
-            0xBF,
-        }
-        if sub_opcode in plain_alu:
-            return self._op_alu_r(sub_opcode) + 4
-        indexed_register_alu = {
-            0x84: self._op_add_a_index_h,
-            0x85: self._op_add_a_index_l,
-            0x8C: self._op_adc_a_index_h,
-            0x8D: self._op_adc_a_index_l,
-            0x94: self._op_sub_a_index_h,
-            0x95: self._op_sub_a_index_l,
-            0x9C: self._op_sbc_a_index_h,
-            0x9D: self._op_sbc_a_index_l,
-            0xA4: self._op_and_a_index_h,
-            0xA5: self._op_and_a_index_l,
-            0xAC: self._op_xor_a_index_h,
-            0xAD: self._op_xor_a_index_l,
-            0xB4: self._op_or_a_index_h,
-            0xB5: self._op_or_a_index_l,
-            0xBC: self._op_cp_a_index_h,
-            0xBD: self._op_cp_a_index_l,
-        }
-        if sub_opcode in indexed_register_alu:
-            return indexed_register_alu[sub_opcode](prefix) + 4
-
-        if sub_opcode in (0x09, 0x19, 0x29, 0x39):
-            return self._op_add_index_rr(prefix, sub_opcode)
-        if sub_opcode == 0x21:
-            return self._op_ld_index_nn(prefix)
-        if sub_opcode == 0x22:
-            return self._op_ld_nn_index(prefix)
-        if sub_opcode == 0x23:
-            return self._op_inc_index(prefix)
-        if sub_opcode == 0x2A:
-            return self._op_ld_index_nn_from_mem(prefix)
-        if sub_opcode == 0x2B:
-            return self._op_dec_index(prefix)
-        if sub_opcode == 0x34:
-            return self._op_inc_index_mem(prefix)
-        if sub_opcode == 0x35:
-            return self._op_dec_index_mem(prefix)
-        if sub_opcode == 0x36:
-            return self._op_ld_index_mem_n(prefix)
-        if sub_opcode in (0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E):
-            return self._op_ld_r_index_mem(prefix, sub_opcode)
-        if sub_opcode in (0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x77):
-            return self._op_ld_index_mem_r(prefix, sub_opcode)
-
-        indexed_memory_alu = {
-            0x86: self._op_add_a_index_mem,
-            0x8E: self._op_adc_a_index_mem,
-            0x96: self._op_sub_a_index_mem,
-            0x9E: self._op_sbc_a_index_mem,
-            0xA6: self._op_and_a_index_mem,
-            0xAE: self._op_xor_a_index_mem,
-            0xB6: self._op_or_a_index_mem,
-            0xBE: self._op_cp_a_index_mem,
-        }
-        if sub_opcode in indexed_memory_alu:
-            return indexed_memory_alu[sub_opcode](prefix)
-        if sub_opcode in (0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0, 0xF8):
-            return self._op_ret_cc(sub_opcode) + 4
-        if sub_opcode in (0xC2, 0xCA, 0xD2, 0xDA, 0xE2, 0xEA, 0xF2, 0xFA, 0xC3):
-            return self._op_jp(sub_opcode) + 4
-        if sub_opcode in (0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC, 0xCD):
-            return self._op_call(sub_opcode) + 4
-        if sub_opcode == 0xC9:
-            return self._op_ret() + 4
-        if sub_opcode in (0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF):
-            return self._op_rst(sub_opcode) + 4
-        if sub_opcode in (0xC6, 0xCE, 0xD6, 0xDE, 0xE6, 0xEE, 0xF6, 0xFE):
-            return self._op_alu_n(sub_opcode) + 4
-        if sub_opcode == 0xEB:
-            return self._op_ex_de_hl() + 4
-        if sub_opcode == 0xD1:
-            return self._op_pop_rr(sub_opcode) + 4
-        if sub_opcode == 0xD5:
-            return self._op_push_rr(sub_opcode) + 4
-        if sub_opcode == 0xD9:
-            return self._op_exx() + 4
-        if sub_opcode == 0xE1:
-            return self._op_pop_index(prefix)
-        if sub_opcode == 0xE3:
-            return self._op_ex_sp_index(prefix)
-        if sub_opcode == 0xE5:
-            return self._op_push_index(prefix)
-        if sub_opcode == 0xE9:
-            return self._op_jp_index(prefix)
-        if sub_opcode == 0xF1:
-            return self._op_pop_af() + 4
-        if sub_opcode == 0xF5:
-            return self._op_push_af() + 4
-        if sub_opcode == 0xF9:
-            return self._op_ld_sp_index(prefix)
-        if sub_opcode == 0xF3:
-            return self._op_interrupt_enable(False) + 4
-        if sub_opcode == 0xFB:
-            return self._op_interrupt_enable(True) + 4
-
-        if sub_opcode == 0xC1:
-            return self._op_pop_rr(sub_opcode) + 4
-        if sub_opcode == 0xC5:
-            return self._op_push_rr(sub_opcode) + 4
-
-        # Every byte after a DD/FD is handled above or by _execute_index (DD,
-        # FD, ED); this guard only documents that the table is complete.
-        raise NotImplementedError(
-            f"unhandled DD/FD opcode 0x{sub_opcode:02X} at PC 0x{(self.pc - 2) & 0xFFFF:04X}"
-        )
+    def _execute_index_cb(self, prefix: int) -> int:
+        # DD CB d op: the displacement comes before the final opcode, and both
+        # are read as operands, not M1 fetches, so R advances only for the DD
+        # and CB prefixes.
+        displacement = self._read_operand_byte()
+        cb_opcode = self._read_operand_byte()
+        return self._index_cb_page[cb_opcode](self, prefix, displacement, cb_opcode)

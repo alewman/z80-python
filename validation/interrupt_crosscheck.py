@@ -37,12 +37,20 @@ from pathlib import Path
 
 from z80_python.cpu import Z80CPU
 
-_LIBRARY = (
-    Path(__file__).resolve().parent / "interrupt_oracle_src" / "libz80sz.so"
-)
+_LIBRARY = Path(__file__).resolve().parent / "interrupt_oracle_src" / "libz80sz.so"
 
 _STATE_FIELDS = (
-    "pc", "sp", "iff1", "iff2", "im", "halted", "r", "i", "a", "stack01", "cyc",
+    "pc",
+    "sp",
+    "iff1",
+    "iff2",
+    "im",
+    "halted",
+    "r",
+    "i",
+    "a",
+    "stack01",
+    "cyc",
 )
 
 
@@ -52,8 +60,17 @@ def _load_library(path: Path) -> ctypes.CDLL:
         getattr(lib, name).restype = None
         getattr(lib, name).argtypes = []
     for name in (
-        "w_gen_int", "w_set_mem", "w_set_pc", "w_set_sp", "w_set_i", "w_set_r",
-        "w_set_a", "w_set_iff1", "w_set_iff2", "w_set_im", "w_set_halted",
+        "w_gen_int",
+        "w_set_mem",
+        "w_set_pc",
+        "w_set_sp",
+        "w_set_i",
+        "w_set_r",
+        "w_set_a",
+        "w_set_iff1",
+        "w_set_iff2",
+        "w_set_im",
+        "w_set_halted",
         "w_set_iff_delay",
     ):
         getattr(lib, name).restype = None
@@ -61,8 +78,16 @@ def _load_library(path: Path) -> ctypes.CDLL:
     lib.w_get_mem.restype = ctypes.c_int
     lib.w_get_mem.argtypes = [ctypes.c_int]
     for name in (
-        "w_get_pc", "w_get_sp", "w_get_i", "w_get_r", "w_get_a", "w_get_iff1",
-        "w_get_iff2", "w_get_im", "w_get_halted", "w_get_iff_delay",
+        "w_get_pc",
+        "w_get_sp",
+        "w_get_i",
+        "w_get_r",
+        "w_get_a",
+        "w_get_iff1",
+        "w_get_iff2",
+        "w_get_im",
+        "w_get_halted",
+        "w_get_iff_delay",
     ):
         getattr(lib, name).restype = ctypes.c_int
         getattr(lib, name).argtypes = []
@@ -85,9 +110,15 @@ class ReferenceHost:
         lib = self.lib
         sp = lib.w_get_sp()
         return {
-            "pc": lib.w_get_pc(), "sp": sp, "iff1": lib.w_get_iff1(), "iff2": lib.w_get_iff2(),
-            "im": lib.w_get_im(), "halted": lib.w_get_halted(), "r": lib.w_get_r(),
-            "i": lib.w_get_i(), "a": lib.w_get_a(),
+            "pc": lib.w_get_pc(),
+            "sp": sp,
+            "iff1": lib.w_get_iff1(),
+            "iff2": lib.w_get_iff2(),
+            "im": lib.w_get_im(),
+            "halted": lib.w_get_halted(),
+            "r": lib.w_get_r(),
+            "i": lib.w_get_i(),
+            "a": lib.w_get_a(),
             "stack01": (lib.w_get_mem(sp), lib.w_get_mem(sp + 1)),
             "cyc": lib.w_get_cyc(),
         }
@@ -97,31 +128,26 @@ class PyHost(Z80CPU):
     """Flat 64 KiB host used only by this cross-check."""
 
     def __init__(self) -> None:
-        super().__init__()
         self.memory = bytearray(0x10000)
         self.total_cyc = 0
+        super().__init__(self.memory.__getitem__, self.memory.__setitem__)
 
     def step(self) -> int:
         t = super().step()
         self.total_cyc += t
         return t
 
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return 0xFF
-
-    def write_port(self, addr: int, value: int) -> None:
-        pass
-
     def state(self) -> dict[str, int]:
         return {
-            "pc": self.pc, "sp": self.sp, "iff1": self.iff1, "iff2": self.iff2, "im": self.im,
-            "halted": self.halted, "r": self.r, "i": self.i, "a": self.a,
+            "pc": self.pc,
+            "sp": self.sp,
+            "iff1": self.iff1,
+            "iff2": self.iff2,
+            "im": self.im,
+            "halted": self.halted,
+            "r": self.r,
+            "i": self.i,
+            "a": self.a,
             "stack01": (self.memory[self.sp], self.memory[(self.sp + 1) & 0xFFFF]),
             "cyc": self.total_cyc,
         }
@@ -236,7 +262,8 @@ def _im2_vector_table() -> Scenario:
         "IM2 vector table dispatch",
         {0x0000: 0x00, 0x4010: 0x00, 0x4011: 0x90},
         {"im": 2, "i": 0x40},
-        py, sz,
+        py,
+        sz,
     )
 
 
@@ -296,7 +323,9 @@ def _retn_restores_iff1() -> Scenario:
     return Scenario(
         "RETN restores IFF1 from IFF2",
         {0x0000: 0x00, 0x0066: 0xED, 0x0067: 0x45},  # ED 45 = RETN
-        {}, py, sz,
+        {},
+        py,
+        sz,
     )
 
 
@@ -315,7 +344,9 @@ def _ei_delay_defers_one_instruction() -> Scenario:
     return Scenario(
         "EI defers acceptance for exactly one instruction",
         {0x0000: 0xFB, 0x0001: 0x00, 0x0002: 0x00},  # EI ; NOP ; NOP
-        {"iff1": 0, "iff2": 0}, py, sz,
+        {"iff1": 0, "iff2": 0},
+        py,
+        sz,
     )
 
 
@@ -336,7 +367,9 @@ def _di_masks_without_losing_request() -> Scenario:
     return Scenario(
         "DI-masked request survives until EI clears",
         {0x0000: 0x00, 0x0001: 0xFB, 0x0002: 0x00, 0x0003: 0x00},  # NOP;EI;NOP;NOP
-        {"iff1": 0, "iff2": 0}, py, sz,
+        {"iff1": 0, "iff2": 0},
+        py,
+        sz,
     )
 
 
@@ -354,7 +387,10 @@ def _nmi_priority_over_pending_maskable() -> Scenario:
 
     return Scenario(
         "NMI takes priority over a simultaneously pending maskable request",
-        {0x0000: 0x00}, {}, py, sz,
+        {0x0000: 0x00},
+        {},
+        py,
+        sz,
     )
 
 

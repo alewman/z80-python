@@ -7,7 +7,9 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-RELEASE_URL = "https://sourceforge.net/projects/fuse-emulator/files/fuse/1.6.0/fuse-1.6.0.tar.gz/download"
+RELEASE_URL = (
+    "https://sourceforge.net/projects/fuse-emulator/files/fuse/1.6.0/fuse-1.6.0.tar.gz/download"
+)
 SHA256 = "3a8fedf2ffe947c571561bac55a59adad4c59338f74e449b7e7a67d9ca047096"
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "validation" / "fuse_data"

@@ -1,6 +1,11 @@
 """CPU state, fetch, stack, and register-selection helpers."""
 
-from z80_python._flags import Flags
+from z80_python._flags import Flags, FlagsView
+
+
+def _signed8(value: int) -> int:
+    """Read a displacement byte as two's complement: 0x00..0x7F forward, 0x80..0xFF back."""
+    return value - 0x100 if value & 0x80 else value
 
 
 class CoreMixin:
@@ -8,7 +13,7 @@ class CoreMixin:
 
     def __init__(self) -> None:
         self.a = 0
-        self.f = Flags()
+        self._f = 0  # F; cpu.f is the public Flags view of it
         self.b = 0
         self.c = 0
         self.d = 0
@@ -29,6 +34,10 @@ class CoreMixin:
         self.bc_ = 0
         self.de_ = 0
         self.hl_ = 0
+        # Q mirrors the ALU's last flag output: every instruction ends with
+        # `self.q = self._f` if it wrote flags and `self.q = 0` if it did not.
+        # Only SCF/CCF read it (undocumented X/Y). Q=0 from writing F=0 is
+        # indistinguishable from 'not written', harmlessly: F's X/Y are 0 too.
         self.q = 0
         self._io_data = 0
         self.halted = False
@@ -38,16 +47,19 @@ class CoreMixin:
         self._pending_maskable_interrupt: int | None = None
         self._non_maskable_interrupt_pending = False
 
+    @property
+    def f(self) -> Flags:
+        """F as a :class:`Flags` whose bits read and write this CPU's F."""
+        return FlagsView(self)
+
+    @f.setter
+    def f(self, value: int | Flags) -> None:
+        self._f = int(value) & 0xFF
+
     def _inc_r(self) -> None:
         # R counts M1 (opcode fetch) cycles in its low 7 bits; bit 7 is only ever
         # written by LD R,A and is preserved across the increment.
         self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
-
-    def _update_q(self, flags_modified: bool) -> None:
-        # Q mirrors the ALU's last flag output: the new F when this instruction wrote
-        # flags, else 0. Only SCF/CCF read it (undocumented X/Y). Q=0 from writing
-        # F=0 is indistinguishable from 'not written', harmlessly: F's X/Y are 0 too.
-        self.q = self.f.byte if flags_modified else 0
 
     # An opcode or prefix fetch is an M1 cycle and bumps R; operand and
     # displacement bytes (_read_operand_byte) are ordinary reads and do not.
@@ -81,9 +93,6 @@ class CoreMixin:
         self.sp = (self.sp + 1) & 0xFFFF
         return (high << 8) | low
 
-    def _can_accept_maskable_interrupt(self) -> bool:
-        return self.iff1 and self._ei_delay == 0 and self._pending_maskable_interrupt is not None
-
     def _accept_reset(self) -> int:
         """Apply the RESET-visible CPU state while the host holds RESET asserted."""
 
@@ -96,7 +105,7 @@ class CoreMixin:
         self.iff2 = False
         self.halted = False
         self._ei_delay = 0
-        self._update_q(False)
+        self.q = 0
         return 3
 
     def _accept_non_maskable_interrupt(self) -> int:
@@ -120,7 +129,7 @@ class CoreMixin:
         self._push_word(self.pc)
         self.wz = 0x0066
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _accept_maskable_interrupt(self) -> int:
@@ -158,7 +167,7 @@ class CoreMixin:
             self.wz = (high << 8) | low
             self.pc = self.wz
             t_states = 19
-        self._update_q(False)
+        self.q = 0
         return t_states
 
     def _hl(self) -> int:

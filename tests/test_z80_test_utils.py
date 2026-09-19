@@ -150,10 +150,10 @@ def test_run_test_case_raises_custom_exception_for_unimplemented_opcode(
     unfinished core raising ``NotImplementedError`` must surface as the named
     exception carrying the opcode and PC read from the vector."""
 
-    def unfinished_decode(self: VectorCPU) -> int:
+    def unfinished_step(self: VectorCPU) -> int:
         raise NotImplementedError(f"unhandled opcode 0xDD at PC 0x{self.pc:04X}")
 
-    monkeypatch.setattr(VectorCPU, "decode_and_execute", unfinished_decode)
+    monkeypatch.setattr(VectorCPU, "step", unfinished_step)
     unsupported_case = {
         "initial": {
             **real_case["initial"],
@@ -181,7 +181,7 @@ def test_run_test_case_returns_vector_shaped_final_state(
     def fake_decode_and_execute(self: VectorCPU) -> int:
         self.pc = (self.pc + 1) & 0xFFFF
         self._inc_r()
-        self._update_q(False)
+        self.q = 0
         return 4
 
     monkeypatch.setattr(VectorCPU, "decode_and_execute", fake_decode_and_execute)
@@ -298,7 +298,7 @@ def test_run_test_case_detects_reordered_memory_writes(
     def swapped_writes(self: VectorCPU) -> int:
         self.pc = (self.pc + 1) & 0xFFFF
         self._inc_r()
-        self._update_q(False)
+        self.q = 0
         self.write_byte(0x9001, 0xD7)
         self.write_byte(0x9000, 0x49)
         return 4

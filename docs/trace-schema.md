@@ -28,6 +28,7 @@ records are aligned by line position when two traces are compared. The
 | `instruction` | object or `null` | The instruction fetched at this boundary; `null` for every non-instruction kind, and permitted to be `null` for instruction boundaries when the producer cannot disassemble. |
 | `before` | state object | Complete processor state at the boundary's start. |
 | `after` | state object | Complete processor state at its end. |
+| `accesses` | array, optional | Every bus access the boundary made, in order, as `[kind, address, value]`: kind `"r"` or `"w"` for memory, `"in"` or `"out"` for I/O. Present only when the producer recorded accesses; absent means *not recorded*, not *none*. |
 
 No other keys are allowed.
 
@@ -101,8 +102,9 @@ An external producer's record for `INC A` at 0x0100 with A = 0x2A:
 
 `compare_step_records` reports every differing field by path: `kind`,
 `t_states`, `instruction.address`, `instruction.data`, `instruction.mnemonic`,
-`instruction.operands`, and `before.<field>` / `after.<field>` for each state
-key. When one trace ends before the other, the divergence path is `record`
+`instruction.operands`, `before.<field>` / `after.<field>` for each state
+key, and `accesses` when both records carry them. A trace without accesses
+therefore diffs cleanly against one with them. When one trace ends before the other, the divergence path is `record`
 with values `"present"` and `null`. Comparison is lazy: the first divergence
 is found without reading either file to the end.
 
@@ -113,3 +115,8 @@ Any change to the set of keys, their types, or their meaning is a new
 `operands` optional for producers did not change the version: every version 1
 trace written before that change is still valid, and every field a version 1
 reader could rely on is still present in traces this package writes.
+Adding the optional `accesses` array (0.4.0) did not change it either, on the
+same terms: this package writes it only when a session tracks accesses, so a
+trace written without tracking is byte-for-byte what a version 1 writer wrote
+before. A reader older than 0.4.0 rejects a record that carries `accesses`,
+because it rejects unknown keys; write without tracking for such a reader.

@@ -5,8 +5,14 @@ Issues are the right place for bug reports, API discussion, and proposed changes
 For a pull request:
 
 1. Keep the instruction core independent of machine/device policy.
-2. Add or update a focused regression test for behavior changes.
-3. Run `python -m pytest -q` and `python -m ruff check .`.
+2. Add or update a focused regression test for behavior changes: a `Row` in
+   the family file under `tests/` for one instruction, or a test of its own
+   for anything that spans instructions. A new or changed handler cites its
+   source in its docstring (see `tests/test_readability.py`).
+3. Run `python -m pytest -q`, `python -m ruff check .` and
+   `python -m ruff format --check .` (CI runs all three).
+   `python -m pytest -q -m "not slow"` skips the external-oracle corpora for a
+   quick loop.
 4. If the change affects instruction semantics, fetch the pinned vector corpus
    and run the complete vector gate. Release candidates and semantic-core changes
    must also rerun ZEXDOC and ZEXALL as documented in [docs/validation.md](docs/validation.md).

@@ -2,15 +2,27 @@
 
 Implementation details are split across private instruction-family mixins. This
 module remains the stable import surface for ``Z80CPU``, ``Flags``, and flag masks.
+
+The host owns memory and every device: it passes ``read_byte(address)`` and
+``write_byte(address, value)`` in, optionally ``read_port`` and ``write_port``
+too, calls :meth:`Z80CPU.step`, and adds the returned T-states to its own
+clock. See docs/start-here.md, "The embedding contract".
 """
 
-from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 from z80_python._alu import ALUMixin
 from z80_python._blocks import BlockMixin
 from z80_python._control import ControlMixin
 from z80_python._core import CoreMixin
-from z80_python._dispatch import DispatchMixin
+from z80_python._dispatch import (
+    CB_RULES,
+    ED_DEFAULT,
+    ED_RULES,
+    MAIN_RULES,
+    DispatchMixin,
+    build_page,
+)
 from z80_python._flags import (
     FLAG_C,
     FLAG_H,
@@ -23,11 +35,16 @@ from z80_python._flags import (
     Flags,
 )
 from z80_python._index import IndexMixin
-from z80_python._index_dispatch import IndexDispatchMixin
+from z80_python._index_dispatch import INDEX_CB_RULES, INDEX_RULES, IndexDispatchMixin
 from z80_python._io import IOMixin
 from z80_python._loads import LoadMixin
 from z80_python._rotate import RotateBitMixin
 from z80_python.state import CPUState
+
+ReadByte = Callable[[int], int]
+WriteByte = Callable[[int, int], None]
+
+_BUS = ("read_byte", "write_byte", "read_port", "write_port")
 
 # Preserve the historical public identity even though the implementation lives
 # in a private module.
@@ -45,7 +62,18 @@ __all__ = [
     "Z80CPU",
     "CPUState",
     "Flags",
+    "ReadByte",
+    "WriteByte",
 ]
+
+
+def _undriven_port(port: int) -> int:
+    """The default ``read_port``: no device drives the data bus, so it reads 0xFF."""
+    return 0xFF
+
+
+def _unconnected_port(port: int, value: int) -> None:
+    """The default ``write_port``: no device is listening, so the write goes nowhere."""
 
 
 class Z80CPU(
@@ -59,15 +87,74 @@ class Z80CPU(
     IOMixin,
     ControlMixin,
     CoreMixin,
-    ABC,
 ):
-    """Abstract Z80 instruction core with memory and I/O supplied by a host.
+    """A Z80 instruction core whose memory and I/O are callables supplied by a host.
 
-    A newly constructed CPU has zeroed processor state. The host owns memory and
-    devices, and may use :meth:`request_reset` for a board-level reset while
-    retaining those devices. Host methods must mask addresses to 16 bits and
-    values to 8 bits when their backing storage requires it.
+    ``read_byte(address)`` and ``write_byte(address, value)`` are the memory
+    bus; ``read_port(port)`` and ``write_port(port, value)`` the I/O bus, which
+    defaults to nothing connected: reads return 0xFF, writes are discarded.
+    The core always passes a 16-bit address and an 8-bit value, so a flat host
+    is two arguments::
+
+        memory = bytearray(0x10000)
+        cpu = Z80CPU(memory.__getitem__, memory.__setitem__)
+
+    The four callables are ordinary attributes and may be replaced later (the
+    debugger's access tracking does exactly that). A newly constructed CPU has
+    zeroed processor state; :meth:`request_reset` gives a board-level reset.
     """
+
+    def __init__(
+        self,
+        read_byte: ReadByte,
+        write_byte: WriteByte,
+        *,
+        read_port: ReadByte | None = None,
+        write_port: WriteByte | None = None,
+    ) -> None:
+        if read_port is None:
+            read_port = _undriven_port
+        if write_port is None:
+            write_port = _unconnected_port
+        for name, bus in zip(_BUS, (read_byte, write_byte, read_port, write_port), strict=True):
+            if not callable(bus):
+                raise TypeError(f"{name} must be callable, not {type(bus).__name__}")
+        self.read_byte = read_byte
+        self.write_byte = write_byte
+        self.read_port = read_port
+        self.write_port = write_port
+        super().__init__()
+        cls = type(self)
+        if "_pages" not in cls.__dict__:
+            # Built once per class, so a subclass that overrides a handler
+            # gets a table that routes to its override.
+            cls._pages = (
+                build_page(cls, MAIN_RULES),
+                build_page(cls, CB_RULES),
+                build_page(cls, ED_RULES, default=ED_DEFAULT),
+                build_page(cls, INDEX_RULES, unassigned=(0xDD, 0xED, 0xFD)),
+                [handler for handler, _ in build_page(cls, INDEX_CB_RULES)],
+            )
+        (
+            self._main_page,
+            self._cb_page,
+            self._ed_page,
+            self._index_page,
+            self._index_cb_page,
+        ) = cls._pages
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        # Until 0.4.0 a host subclassed Z80CPU and defined the bus as methods.
+        # The instance attributes set in __init__ would silently shadow them,
+        # so refuse the old form when the class is defined, naming the new one.
+        super().__init_subclass__(**kwargs)
+        legacy = [name for name in _BUS if name in cls.__dict__]
+        if legacy:
+            raise TypeError(
+                f"{cls.__name__} defines {', '.join(legacy)} as methods; since 0.4.0 the "
+                "bus is passed in: Z80CPU(read_byte, write_byte, *, read_port=None, "
+                "write_port=None)"
+            )
 
     def step(self) -> int:
         """Advance one instruction boundary and return its documented T-state count.
@@ -78,7 +165,8 @@ class Z80CPU(
         instruction/lifecycle totals, not externally observable bus cycles: a host
         learns how long an instruction took, not which T-state each access occupied.
         The accesses themselves -- their kind, address, value, and order -- are
-        certified against the SingleStepTests pin traces (see docs/validation.md).
+        checked against the SingleStepTests pin traces, an emulator-derived oracle;
+        no hardware-captured one observes bus order (see docs/validation.md).
         ``decode_and_execute()`` remains the historical instruction-only compatibility
         entry point.
         """
@@ -86,16 +174,24 @@ class Z80CPU(
             return self._accept_reset()
         if self._non_maskable_interrupt_pending:
             return self._accept_non_maskable_interrupt()
-        if self._can_accept_maskable_interrupt():
+        delay_was_active = self._ei_delay > 0
+        if self.iff1 and not delay_was_active and self._pending_maskable_interrupt is not None:
             return self._accept_maskable_interrupt()
 
-        delay_was_active = self._ei_delay > 0
         if self.halted:
             self._inc_r()
-            self._update_q(False)
+            self.q = 0
             t_states = 4
         else:
-            t_states = self.decode_and_execute()
+            # decode_and_execute() and _fetch_byte(), written out: every
+            # instruction passes through these lines, and the three calls they
+            # replace cost more than most handlers.
+            pc = self.pc
+            opcode = self.read_byte(pc)
+            self.pc = (pc + 1) & 0xFFFF
+            self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
+            handler, argument = self._main_page[opcode]
+            t_states = handler(self) if argument is None else handler(self, argument)
         if delay_was_active:
             self._ei_delay -= 1
         return t_states
@@ -109,7 +205,7 @@ class Z80CPU(
 
         return CPUState(
             a=self.a,
-            f=self.f.byte,
+            f=self._f,
             b=self.b,
             c=self.c,
             d=self.d,
@@ -149,7 +245,7 @@ class Z80CPU(
             raise TypeError("state must be a CPUState")
 
         self.a = state.a
-        self.f.byte = state.f
+        self._f = state.f
         self.b = state.b
         self.c = state.c
         self.d = state.d
@@ -247,31 +343,3 @@ class Z80CPU(
         """Cancel a requested NMI that has not yet reached an instruction boundary."""
 
         self._non_maskable_interrupt_pending = False
-
-    @abstractmethod
-    def read_byte(self, addr: int) -> int:
-        """Read one byte from the 16-bit memory address space.
-
-        The host must mask ``addr`` to 16 bits and return an 8-bit value.
-        """
-
-    @abstractmethod
-    def write_byte(self, addr: int, value: int) -> None:
-        """Write one byte to the 16-bit memory address space.
-
-        The host must mask ``addr`` to 16 bits and ``value`` to 8 bits.
-        """
-
-    @abstractmethod
-    def read_port(self, addr: int) -> int:
-        """Read one byte from the 16-bit I/O port address space.
-
-        The host must mask ``addr`` to 16 bits and return an 8-bit value.
-        """
-
-    @abstractmethod
-    def write_port(self, addr: int, value: int) -> None:
-        """Write one byte to the 16-bit I/O port address space.
-
-        The host must mask ``addr`` to 16 bits and ``value`` to 8 bits.
-        """
