@@ -19,8 +19,8 @@ Bits 3 and 5 of the flag register have no defined meaning. On hardware they
 are simply latched from whatever byte the ALU's result bus carries at the
 moment flags are written. For ordinary arithmetic, logic, rotates, `INC`,
 `DEC`, `DAA`, and `NEG` that byte is the result, so **X/Y are bits 3 and 5 of
-the result**. `Flags.set_xy(value)` does the copy; `_set_xysz` in `_alu.py`
-is the common path.
+the result**. `SZXY[result]` in `_flags.py` is that rule as a table (S, Z,
+Y and X from one byte), and most handlers build F from it.
 
 Every exception is a case where the byte on the bus is *not* the result:
 
@@ -68,7 +68,8 @@ does not model them. `_core.py` `_update_q` is the whole Q model and is
 called at the end of every instruction, including ones that do not touch
 flags, because the "0" case is what `CCF` needs to see. A DD or FD prefix is
 its own M1 cycle that writes no flags, so a prefixed `SCF`/`CCF` always sees
-Q = 0; `_op_scf_ccf` takes a `prefixed` flag for that (`_alu.py`).
+Q = 0; `_execute_index` clears Q when it decodes the prefixed opcode
+(`_index_dispatch.py`), and `_op_scf_ccf` reads it (`_alu.py`).
 
 ### WZ (MEMPTR): the address latch
 

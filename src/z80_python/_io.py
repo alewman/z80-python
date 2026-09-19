@@ -1,13 +1,22 @@
 """Input/output instruction implementation."""
 
+from z80_python._flags import FLAG_C, FLAG_H, FLAG_N, FLAG_PV, FLAG_XY, PARITY, SZXY, SZXYP
+
+
+def _block_io_flags(total: int, data: int, b: int) -> int:
+    """F after INI/IND/OUTI/OUTD, from the byte moved and the new B.
+
+    Block I/O flags (Undocumented Z80 Documented, 4.3): N = bit 7 of the byte,
+    H = C = carry of (C+/-1) + byte for INI/IND (L + byte for OUTI/OUTD), and
+    PV = parity of ((that sum & 7) ^ B). S/Z/X/Y come from the new B.
+    ``total`` is that sum.
+    """
+    carry = FLAG_H | FLAG_C if total > 0xFF else 0
+    return SZXY[b] | ((data >> 6) & FLAG_N) | PARITY[(total & 7) ^ b] | carry
+
 
 class IOMixin:
     """Private immediate, register, and block I/O implementation."""
-
-    def _in_flags(self, value: int) -> None:
-        self.f.n = self.f.h = 0
-        self._set_parity(value)
-        self._set_xysz(value)
 
     def _op_in_a_n(self) -> int:
         """IN A,(n) -- port address is A:n."""
@@ -32,7 +41,7 @@ class IOMixin:
         dest = (opcode >> 3) & 0x07
         self.wz = (self._bc() + 1) & 0xFFFF
         value = self.read_port(self._bc())
-        self._in_flags(value)
+        self._f = (self._f & FLAG_C) | SZXYP[value]
         if dest != 6:
             self._write_reg(dest, value)
         self._update_q(True)
@@ -64,15 +73,7 @@ class IOMixin:
         self.write_byte(self._hl(), data)
         hl = (self._hl() + 1) & 0xFFFF if increment else (self._hl() - 1) & 0xFFFF
         self.h, self.l = (hl >> 8) & 0xFF, hl & 0xFF
-        carry = 1 if (adj + data) > 0xFF else 0
-        self.f.c = carry
-        # Block I/O flags (Undocumented Z80 Documented, 4.3): N = bit 7 of the byte,
-        # H = C = carry of (C+/-1) + byte for INI/IND (L + byte for OUTI/OUTD), and
-        # PV = parity of ((that sum & 7) ^ B). S/Z/X/Y come from the new B.
-        self.f.n = (data >> 7) & 1
-        self._set_parity(((adj + data) & 7) ^ self.b)
-        self._set_xysz(self.b)
-        self.f.h = carry
+        self._f = _block_io_flags(adj + data, data, self.b)
         return self.b != 0
 
     def _block_outi(self, increment: bool) -> bool:
@@ -85,15 +86,7 @@ class IOMixin:
         addr = self._bc()
         self.write_port(addr, data)
         self.wz = (addr + 1) & 0xFFFF if increment else (addr - 1) & 0xFFFF
-        carry = 1 if (self.l + data) > 0xFF else 0
-        self.f.c = carry
-        # Block I/O flags (Undocumented Z80 Documented, 4.3): N = bit 7 of the byte,
-        # H = C = carry of (C+/-1) + byte for INI/IND (L + byte for OUTI/OUTD), and
-        # PV = parity of ((that sum & 7) ^ B). S/Z/X/Y come from the new B.
-        self.f.n = (data >> 7) & 1
-        self._set_parity(((self.l + data) & 7) ^ self.b)
-        self._set_xysz(self.b)
-        self.f.h = carry
+        self._f = _block_io_flags(self.l + data, data, self.b)
         return self.b != 0
 
     # Repeating block I/O adjusts flags once more after the PC rewind. This is
@@ -101,17 +94,19 @@ class IOMixin:
     # generator: X/Y from PC high byte bits 3/5, and when C is set, PV and H
     # are corrected from B+/-1 depending on bit 7 of the byte moved.
     def _post_in_o_r(self) -> None:
-        self.f.x = (self.pc >> 11) & 1
-        self.f.y = (self.pc >> 13) & 1
-        if self.f.c:
+        f = (self._f & ~FLAG_XY) | ((self.pc >> 8) & FLAG_XY)
+        b = self.b
+        # PV flips when the parity term below is odd (PARITY[x] ^ PV is PV for odd x).
+        if f & FLAG_C:
             if self._io_data & 0x80:
-                self.f.pv ^= 1 - self._parity((self.b - 1) & 7)
-                self.f.h = 1 if (self.b & 0x0F) == 0 else 0
+                f ^= PARITY[(b - 1) & 7] ^ FLAG_PV
+                f = (f & ~FLAG_H) | (FLAG_H if (b & 0x0F) == 0 else 0)
             else:
-                self.f.pv ^= 1 - self._parity((self.b + 1) & 7)
-                self.f.h = 1 if (self.b & 0x0F) == 0x0F else 0
+                f ^= PARITY[(b + 1) & 7] ^ FLAG_PV
+                f = (f & ~FLAG_H) | (FLAG_H if (b & 0x0F) == 0x0F else 0)
         else:
-            self.f.pv ^= 1 - self._parity(self.b & 7)
+            f ^= PARITY[b & 7] ^ FLAG_PV
+        self._f = f
 
     def _op_ini(self) -> int:
         """INI -- (HL) <- port BC; HL++, B--."""

@@ -1,4 +1,10 @@
-"""Z80 flag-register implementation and bit masks."""
+"""The Z80 F register: bit masks, lookup tables, and the public ``Flags`` value.
+
+The core keeps F as a plain int, ``cpu._f``, and each handler computes the
+whole new F in one expression from the masks and tables below. ``Flags`` is
+the public face of the same byte: a standalone value (``Flags(0x45)``), or,
+as ``cpu.f``, a view whose bits read and write the CPU's own F.
+"""
 
 FLAG_S = 0b1000_0000
 FLAG_Z = 0b0100_0000
@@ -9,9 +15,26 @@ FLAG_PV = 0b0000_0100
 FLAG_N = 0b0000_0010
 FLAG_C = 0b0000_0001
 
+#: The two undocumented bits, which copy bits 5 and 3 of some internal byte.
+FLAG_XY = FLAG_Y | FLAG_X
+
+#: S, Z, Y and X as an ordinary result byte sets them: S and Y/X are bits 7,
+#: 5 and 3 of the byte itself, Z is set when it is zero.
+SZXY = tuple((value & (FLAG_S | FLAG_XY)) | (FLAG_Z if value == 0 else 0) for value in range(256))
+
+#: PV as parity: set when the byte has an even number of 1 bits.
+PARITY = tuple(FLAG_PV if value.bit_count() % 2 == 0 else 0 for value in range(256))
+
+#: S, Z, Y, X and parity together: logic, rotates, IN r,(C), RLD/RRD, DAA.
+SZXYP = tuple(SZXY[value] | PARITY[value] for value in range(256))
+
 
 class Flags:
-    """The Z80 F register, including the undocumented X/Y bits."""
+    """The Z80 F register, including the undocumented X/Y bits.
+
+    ``Flags(value)`` is a standalone byte. ``cpu.f`` is a view: reading or
+    setting its bits reads or sets the CPU's F.
+    """
 
     __slots__ = ("_byte",)
 
@@ -32,69 +55,37 @@ class Flags:
     def byte(self, value: int) -> None:
         self._byte = value & 0xFF
 
-    @property
-    def s(self) -> int:
-        return (self._byte >> 7) & 1
+    def _bit(self, mask: int) -> int:
+        return 1 if self._byte & mask else 0
 
-    @s.setter
-    def s(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_S) | ((value & 1) << 7)
+    def _set_bit(self, mask: int, value: int) -> None:
+        self._byte = (self._byte | mask) if value & 1 else (self._byte & ~mask)
 
-    @property
-    def z(self) -> int:
-        return (self._byte >> 6) & 1
-
-    @z.setter
-    def z(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_Z) | ((value & 1) << 6)
-
-    @property
-    def y(self) -> int:
-        return (self._byte >> 5) & 1
-
-    @y.setter
-    def y(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_Y) | ((value & 1) << 5)
-
-    @property
-    def h(self) -> int:
-        return (self._byte >> 4) & 1
-
-    @h.setter
-    def h(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_H) | ((value & 1) << 4)
-
-    @property
-    def x(self) -> int:
-        return (self._byte >> 3) & 1
-
-    @x.setter
-    def x(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_X) | ((value & 1) << 3)
-
-    @property
-    def pv(self) -> int:
-        return (self._byte >> 2) & 1
-
-    @pv.setter
-    def pv(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_PV) | ((value & 1) << 2)
-
-    @property
-    def n(self) -> int:
-        return (self._byte >> 1) & 1
-
-    @n.setter
-    def n(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_N) | ((value & 1) << 1)
-
-    @property
-    def c(self) -> int:
-        return self._byte & 1
-
-    @c.setter
-    def c(self, value: int) -> None:
-        self._byte = (self._byte & ~FLAG_C) | (value & 1)
+    s = property(lambda self: self._bit(FLAG_S), lambda self, v: self._set_bit(FLAG_S, v))
+    z = property(lambda self: self._bit(FLAG_Z), lambda self, v: self._set_bit(FLAG_Z, v))
+    y = property(lambda self: self._bit(FLAG_Y), lambda self, v: self._set_bit(FLAG_Y, v))
+    h = property(lambda self: self._bit(FLAG_H), lambda self, v: self._set_bit(FLAG_H, v))
+    x = property(lambda self: self._bit(FLAG_X), lambda self, v: self._set_bit(FLAG_X, v))
+    pv = property(lambda self: self._bit(FLAG_PV), lambda self, v: self._set_bit(FLAG_PV, v))
+    n = property(lambda self: self._bit(FLAG_N), lambda self, v: self._set_bit(FLAG_N, v))
+    c = property(lambda self: self._bit(FLAG_C), lambda self, v: self._set_bit(FLAG_C, v))
 
     def set_xy(self, value: int) -> None:
-        self._byte = (self._byte & ~(FLAG_X | FLAG_Y)) | (value & (FLAG_X | FLAG_Y))
+        self._byte = (self._byte & ~FLAG_XY) | (value & FLAG_XY)
+
+
+class FlagsView(Flags):
+    """``cpu.f``: a ``Flags`` whose byte is the CPU's own F (``cpu._f``)."""
+
+    __slots__ = ("_cpu",)
+
+    def __init__(self, cpu: object) -> None:
+        self._cpu = cpu
+
+    @property
+    def _byte(self) -> int:
+        return self._cpu._f
+
+    @_byte.setter
+    def _byte(self, value: int) -> None:
+        self._cpu._f = value & 0xFF

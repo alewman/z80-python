@@ -11,7 +11,7 @@ behavior. Nothing here is a substitute for the code; the code is the reference.
 
 | Name | Width | In this core | Notes |
 | --- | --- | --- | --- |
-| A, F | 8 | `cpu.a`, `cpu.f` (a `Flags` object; `cpu.f.byte` is the raw value) | Accumulator and flags; together the pair AF |
+| A, F | 8 | `cpu.a`, `cpu.f` (a `Flags` view: `cpu.f.byte`, `cpu.f.c`, `int(cpu.f)`) | Accumulator and flags; together the pair AF |
 | B, C, D, E, H, L | 8 | `cpu.b` ... `cpu.l` | General registers; pairs BC, DE, HL |
 | AF', BC', DE', HL' | 16 | `cpu.af_`, `cpu.bc_`, `cpu.de_`, `cpu.hl_` | Alternate set. `EX AF,AF'` swaps AF; `EXX` swaps the other three |
 | IX, IY | 16 | `cpu.ix`, `cpu.iy` | Index registers. Their halves IXH/IXL/IYH/IYL are usable as 8-bit registers (undocumented but universal) |
@@ -45,8 +45,12 @@ flag:  S   Z   Y   H   X   P/V  N   C
   3 and 5 of their result into them. The exceptions are the whole subject of
   [undocumented-behavior](undocumented-behavior.md).
 
-`_flags.py` is the whole implementation: one byte with named accessors and
-`set_xy(value)`, which copies bits 3 and 5 of `value`.
+Inside the core F is one int, `cpu._f`, and each instruction computes the
+whole new F in a single expression from the masks and tables in `_flags.py`
+(`SZXY[r]` is S, Z, Y and X as a result byte `r` sets them; `SZXYP[r]` adds
+parity). `cpu.f` is the public face: a `Flags` view whose named bits
+(`cpu.f.z`, `cpu.f.c = 1`) read and write that same int. `Flags(value)` on
+its own is a standalone byte with the same accessors.
 
 ## How an opcode byte is decoded
 

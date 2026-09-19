@@ -1,78 +1,62 @@
 """Rotate, shift, and bit-operation implementation."""
 
+from z80_python._flags import FLAG_C, FLAG_H, FLAG_PV, FLAG_S, FLAG_XY, FLAG_Z, SZXYP
+
+
+def _bit_flags(f: int, value: int, bit_index: int, xy_source: int) -> int:
+    """F after BIT b: Z (and PV) when the bit is clear, S only for a set bit 7, H set, C kept."""
+    tested = value & (1 << bit_index)
+    return (
+        (f & FLAG_C)
+        | FLAG_H
+        | (xy_source & FLAG_XY)
+        | (tested & FLAG_S)
+        | (0 if tested else FLAG_Z | FLAG_PV)
+    )
+
 
 class RotateBitMixin:
     """Private rotate, shift, and bit implementation."""
 
     def _rlc(self, x: int) -> int:
-        x = ((x << 1) | (x >> 7)) & 0xFF
-        self.f.c = x & 1
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = ((x << 1) | (x >> 7)) & 0xFF
+        self._f = SZXYP[r] | (x >> 7)
+        return r
 
     def _rrc(self, x: int) -> int:
-        x = ((x >> 1) | (x << 7)) & 0xFF
-        self.f.c = (x >> 7) & 1
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = ((x >> 1) | (x << 7)) & 0xFF
+        self._f = SZXYP[r] | (x & 1)
+        return r
 
     def _rl(self, x: int) -> int:
-        carry = (x >> 7) & 1
-        x = ((x << 1) | self.f.c) & 0xFF
-        self.f.c = carry
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = ((x << 1) | (self._f & FLAG_C)) & 0xFF
+        self._f = SZXYP[r] | (x >> 7)
+        return r
 
     def _rr(self, x: int) -> int:
-        carry = x & 1
-        x = ((x >> 1) | (self.f.c << 7)) & 0xFF
-        self.f.c = carry
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = (x >> 1) | ((self._f & FLAG_C) << 7)
+        self._f = SZXYP[r] | (x & 1)
+        return r
 
     def _sla(self, x: int) -> int:
-        carry = (x >> 7) & 1
-        x = (x << 1) & 0xFF
-        self.f.c = carry
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = (x << 1) & 0xFF
+        self._f = SZXYP[r] | (x >> 7)
+        return r
 
     def _sra(self, x: int) -> int:
-        carry = x & 1
-        x = (x & 0x80) | (x >> 1)
-        self.f.c = carry
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = (x & 0x80) | (x >> 1)
+        self._f = SZXYP[r] | (x & 1)
+        return r
 
     def _sll(self, x: int) -> int:
-        carry = (x >> 7) & 1
-        x = ((x << 1) | 1) & 0xFF
-        self.f.c = carry
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = ((x << 1) | 1) & 0xFF
+        self._f = SZXYP[r] | (x >> 7)
+        return r
 
     def _srl(self, x: int) -> int:
-        carry = x & 1
-        x >>= 1
-        self.f.c = carry
-        self.f.n = self.f.h = 0
-        self._set_parity(x)
-        self._set_xysz(x)
-        return x
+        r = x >> 1
+        self._f = SZXYP[r] | (x & 1)
+        return r
 
     def _rot_apply(self, group: int, value: int) -> int:
         operations = (
@@ -103,38 +87,32 @@ class RotateBitMixin:
     def _op_rlca(self) -> int:
         """RLCA"""
         self.a = ((self.a << 1) | (self.a >> 7)) & 0xFF
-        self.f.c = self.a & 1
-        self.f.n = self.f.h = 0
-        self.f.set_xy(self.a)
+        # The accumulator rotates keep S, Z and PV; C is the bit rotated out.
+        self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & (FLAG_XY | FLAG_C))
         self._update_q(True)
         return 4
 
     def _op_rrca(self) -> int:
         """RRCA"""
-        self.f.c = self.a & 1
+        carry = self.a & 1
         self.a = ((self.a >> 1) | (self.a << 7)) & 0xFF
-        self.f.n = self.f.h = 0
-        self.f.set_xy(self.a)
+        self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & FLAG_XY) | carry
         self._update_q(True)
         return 4
 
     def _op_rla(self) -> int:
         """RLA"""
-        carry_in = self.f.c
-        self.f.c = (self.a >> 7) & 1
-        self.a = ((self.a << 1) | carry_in) & 0xFF
-        self.f.n = self.f.h = 0
-        self.f.set_xy(self.a)
+        carry = self.a >> 7
+        self.a = ((self.a << 1) | (self._f & FLAG_C)) & 0xFF
+        self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & FLAG_XY) | carry
         self._update_q(True)
         return 4
 
     def _op_rra(self) -> int:
         """RRA"""
-        carry_in = self.f.c
-        self.f.c = self.a & 1
-        self.a = ((self.a >> 1) | (carry_in << 7)) & 0xFF
-        self.f.n = self.f.h = 0
-        self.f.set_xy(self.a)
+        carry = self.a & 1
+        self.a = (self.a >> 1) | ((self._f & FLAG_C) << 7)
+        self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & FLAG_XY) | carry
         self._update_q(True)
         return 4
 
@@ -152,13 +130,7 @@ class RotateBitMixin:
             value = self._read_reg(src)
             xy_source = value
             t_states = 8
-        bit_set = (value >> bit_index) & 1
-        self.f.n = 0
-        self.f.h = 1
-        self.f.z = 0 if bit_set else 1
-        self.f.pv = self.f.z
-        self.f.s = 1 if (bit_index == 7 and bit_set) else 0
-        self.f.set_xy(xy_source)
+        self._f = _bit_flags(self._f, value, bit_index, xy_source)
         self._update_q(True)
         return t_states
 
@@ -199,9 +171,7 @@ class RotateBitMixin:
         data = self.read_byte(addr)
         self.write_byte(addr, ((data >> 4) | (self.a << 4)) & 0xFF)
         self.a = (self.a & 0xF0) | (data & 0x0F)
-        self.f.n = self.f.h = 0
-        self._set_parity(self.a)
-        self._set_xysz(self.a)
+        self._f = (self._f & FLAG_C) | SZXYP[self.a]
         self._update_q(True)
         return 18
 
@@ -212,8 +182,6 @@ class RotateBitMixin:
         data = self.read_byte(addr)
         self.write_byte(addr, ((data << 4) | (self.a & 0x0F)) & 0xFF)
         self.a = (self.a & 0xF0) | (data >> 4)
-        self.f.n = self.f.h = 0
-        self._set_parity(self.a)
-        self._set_xysz(self.a)
+        self._f = (self._f & FLAG_C) | SZXYP[self.a]
         self._update_q(True)
         return 18

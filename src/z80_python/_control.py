@@ -1,41 +1,33 @@
 """Jump, call, return, restart, exchange, and CPU-control (NOP/HALT/DI/EI/IM) group."""
 
 from z80_python._core import _signed8
+from z80_python._flags import FLAG_C, FLAG_PV, FLAG_S, FLAG_Z
+
+_CONDITIONS = (
+    (FLAG_Z, 0),
+    (FLAG_Z, FLAG_Z),
+    (FLAG_C, 0),
+    (FLAG_C, FLAG_C),
+    (FLAG_PV, 0),
+    (FLAG_PV, FLAG_PV),
+    (FLAG_S, 0),
+    (FLAG_S, FLAG_S),
+)
 
 
 class ControlMixin:
     """Private control-flow, exchange, and CPU-control implementation."""
 
-    def _cond_true(self, cond: int) -> int:
-        if cond == 0:
-            return self.f.z == 0
-        if cond == 1:
-            return self.f.z == 1
-        if cond == 2:
-            return self.f.c == 0
-        if cond == 3:
-            return self.f.c == 1
-        if cond == 4:
-            return self.f.pv == 0
-        if cond == 5:
-            return self.f.pv == 1
-        if cond == 6:
-            return self.f.s == 0
-        return self.f.s == 1
+    def _cond_true(self, cond: int) -> bool:
+        # cc in bits 5-3: NZ Z NC C PO PE P M, a flag and whether it must be set.
+        mask, wanted = _CONDITIONS[cond]
+        return (self._f & mask) == wanted
 
     def _op_jr(self, opcode: int) -> int:
         """JR cc,e -- relative jump; JR e is the always-taken form. 12 T-states taken, 7 not."""
         displacement = _signed8(self._read_operand_byte())
-        if opcode == 0x18:
-            taken = True
-        elif opcode == 0x20:
-            taken = self.f.z == 0
-        elif opcode == 0x28:
-            taken = self.f.z == 1
-        elif opcode == 0x30:
-            taken = self.f.c == 0
-        else:
-            taken = self.f.c == 1
+        # JR e is 0x18; JR NZ/Z/NC/C are 0x20-0x38, whose bits 4-3 are cc 0-3.
+        taken = opcode == 0x18 or self._cond_true((opcode >> 3) & 0x03)
         if not taken:
             self._update_q(False)
             return 7
@@ -179,9 +171,9 @@ class ControlMixin:
 
     def _op_ex_af_af(self) -> int:
         """EX AF,AF'"""
-        af = (self.a << 8) | self.f.byte
+        af = (self.a << 8) | self._f
         self.a = (self.af_ >> 8) & 0xFF
-        self.f.byte = self.af_ & 0xFF
+        self._f = self.af_ & 0xFF
         self.af_ = af
         self._update_q(False)
         return 4

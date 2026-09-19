@@ -196,7 +196,7 @@ class Z80CPU(
 
         return CPUState(
             a=self.a,
-            f=self.f.byte,
+            f=self._f,
             b=self.b,
             c=self.c,
             d=self.d,
@@ -236,7 +236,7 @@ class Z80CPU(
             raise TypeError("state must be a CPUState")
 
         self.a = state.a
-        self.f.byte = state.f
+        self._f = state.f
         self.b = state.b
         self.c = state.c
         self.d = state.d

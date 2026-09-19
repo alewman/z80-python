@@ -1,5 +1,7 @@
 """8-bit and 16-bit load group, including PUSH/POP (Zilog files the stack transfers here)."""
 
+from z80_python._flags import FLAG_C, FLAG_PV, SZXY
+
 
 class LoadMixin:
     """Private load-family implementation."""
@@ -85,27 +87,17 @@ class LoadMixin:
 
     def _op_ld_a_i(self) -> int:
         """LD A,I -- one of the two loads that set flags (LD A,R is the other); PV mirrors IFF2."""
-        value = self.i
-        self.a = value
-        self.f.n = self.f.h = 0
+        self.a = self.i
         # PV reports IFF2, the only way software can read the interrupt-enable state.
-        self.f.pv = 1 if self.iff2 else 0
-        self.f.set_xy(value)
-        self.f.s = (value >> 7) & 1
-        self.f.z = 1 if value == 0 else 0
+        self._f = (self._f & FLAG_C) | SZXY[self.a] | (FLAG_PV if self.iff2 else 0)
         self._update_q(True)
         return 9
 
     def _op_ld_a_r(self) -> int:
         """LD A,R -- one of the two loads that set flags (LD A,I is the other); PV mirrors IFF2."""
-        value = self.r
-        self.a = value
-        self.f.n = self.f.h = 0
+        self.a = self.r
         # PV reports IFF2, the only way software can read the interrupt-enable state.
-        self.f.pv = 1 if self.iff2 else 0
-        self.f.set_xy(value)
-        self.f.s = (value >> 7) & 1
-        self.f.z = 1 if value == 0 else 0
+        self._f = (self._f & FLAG_C) | SZXY[self.a] | (FLAG_PV if self.iff2 else 0)
         self._update_q(True)
         return 9
 
@@ -168,13 +160,13 @@ class LoadMixin:
         """POP AF"""
         value = self._pop_word()
         self.a = (value >> 8) & 0xFF
-        self.f.byte = value & 0xFF
+        self._f = value & 0xFF
         self._update_q(False)
         return 10
 
     def _op_push_af(self) -> int:
         """PUSH AF"""
-        self._push_word((self.a << 8) | self.f.byte)
+        self._push_word((self.a << 8) | self._f)
         self._update_q(False)
         return 11
 
