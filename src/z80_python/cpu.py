@@ -165,7 +165,8 @@ class Z80CPU(
         instruction/lifecycle totals, not externally observable bus cycles: a host
         learns how long an instruction took, not which T-state each access occupied.
         The accesses themselves -- their kind, address, value, and order -- are
-        certified against the SingleStepTests pin traces (see docs/validation.md).
+        checked against the SingleStepTests pin traces, an emulator-derived oracle;
+        no hardware-captured one observes bus order (see docs/validation.md).
         ``decode_and_execute()`` remains the historical instruction-only compatibility
         entry point.
         """

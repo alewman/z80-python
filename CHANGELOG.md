@@ -72,10 +72,10 @@ fact; entries from 0.4.0 onward are written as the work lands.
   by z80test's hardware-captured `z80full`).
 - `benchmarks/compare_revisions.py`, the same-process A/B the ladder was
   measured with.
-- **Memory bus transaction certification.** `VectorCPU` records every
-  `read_byte`/`write_byte` an instruction performs, and `run_test_case`
-  compares that sequence against the pin strobes in each SingleStepTests
-  case's `cycles` array — `r-m-` for a read, whose data byte latches on the
+- **Memory bus transaction check (emulator-derived tier).** `VectorCPU`
+  records every `read_byte`/`write_byte` an instruction performs, and
+  `run_test_case` compares that sequence against the pin strobes in each
+  SingleStepTests case's `cycles` array — `r-m-` for a read, whose data byte latches on the
   following entry, and `-wm-` for a write, which carries its value inline.
   **1,604,000 of 1,604,000 cases agree.** Port strobes are excluded because
   `VectorCPU` already feeds port reads from the vector's `ports` array in
@@ -95,11 +95,14 @@ fact; entries from 0.4.0 onward are written as the work lands.
 ### Fixed
 
 - **`EX (SP),HL` and `EX (SP),IX/IY` wrote the low byte to `(SP)` before the
-  high byte to `(SP+1)`.** Hardware writes `(SP+1)` first. The resulting
-  memory is identical either way, so no state-comparing oracle could see it:
-  ZEXALL, z80test, and this corpus's own register/RAM comparison all passed
-  both orderings. Caught by FUSE's bus events, adjudicated against
-  SingleStepTests' pin traces, and now gated by the transaction check above.
+  high byte to `(SP+1)`.** SingleStepTests' pin traces and FUSE's bus
+  events, both emulator-derived, put the `(SP+1)` write first; no
+  hardware-captured oracle observes bus order, and UM0080 p. 127 gives the
+  M-cycles but not their addresses. The resulting memory is identical either
+  way, so no state-comparing oracle could see it: ZEXALL, z80test, and this
+  corpus's own register/RAM comparison all passed both orderings. Caught by
+  FUSE, adjudicated against SingleStepTests, and now gated by the transaction
+  check above.
   Bus transaction sequence: 1,601,000 → 1,604,000 of 1,604,000.
 
 ### Changed

@@ -2,18 +2,43 @@
 
 ## Claim
 
-`z80-python` is a **SingleStep-complete, ZEXDOC/ZEXALL-certified pure-Python
-Z80 instruction core**. The claim covers instruction-level semantic state and
-long execution sequences. It includes a deterministic instruction-boundary model for
-RESET, maskable interrupt acceptance/service, NMI, EI delay, and HALT wakeup. It does
-not claim cycle-accurate external bus signaling, a complete Z80 machine, CP/M, device
-scheduling, or memory contention. It does claim the memory and I/O accesses
-themselves -- which ones happen, to which addresses, with which values, in which
-order -- certified against hardware-corrected pin traces; see
-[Bus transactions](#bus-transactions).
+`z80-python` is a pure-Python Z80 instruction core that agrees with every
+oracle below, each named with its tier. Against **hardware-captured** values it
+passes raxoft z80test's `z80full`, `z80memptr` and `z80ccf` (every flag, WZ and
+the SCF/CCF Q rule for the instructions z80test covers) and ZEXDOC/ZEXALL
+(long-sequence CRCs found on a real Z80). Against **emulator-derived** values it
+passes all 1,604,000 SingleStepTests cases (registers, flags, WZ, Q, R, memory,
+I/O, T-states and memory-access order for every opcode), 1,350 of FUSE's 1,356
+cases with the six others explained, and an interrupt-lifecycle cross-check
+against an independent core. Runs of DD/FD prefixes rest on **documentation**
+alone. The model includes RESET, maskable interrupts, NMI, the EI delay and
+HALT wakeup at instruction boundaries. It does not claim cycle-accurate bus
+signalling, a complete machine, CP/M, device scheduling or memory contention.
 
 The specific lifecycle contract, mode coverage, and remaining exclusions are in
 [interrupt-lifecycle.md](interrupt-lifecycle.md).
+
+## Oracle tiers
+
+Oracles are ranked by where their expected values came from:
+**hardware-captured > hardware-corrected > emulator-derived > documentation**.
+A lower-tier oracle is a detector, never a judge: when two disagree, the higher
+tier decides, and a claim is only as strong as the highest tier that checks it.
+
+| Oracle | Tier | Where its expected values came from | What it checks here | What it cannot see |
+| --- | --- | --- | --- | --- |
+| raxoft z80test 1.2a: `z80full`, `z80memptr`, `z80ccf` | hardware-captured | CRCs recorded on a 48K ZX Spectrum's Zilog NMOS Z80 | every flag (X/Y included) and register for most instructions; WZ through a following `BIT n,(HL)`; SCF/CCF after every instruction (Q) | T-states, bus order, interrupts, R, `RST`, prefix runs |
+| ZEXDOC / ZEXALL (Cringle 1994) | hardware-captured | per-group CRCs "found empirically on a real Z80" (the program's own source) | long sequences of register, flag (ZEXALL: X/Y too) and memory state | WZ, Q, R, I/O, HALT, T-states, interrupts; a CRC names a group, not a case |
+| (none for the Z80) | hardware-corrected | -- | -- | -- |
+| SingleStepTests/z80, pinned revision | emulator-derived | a generator its README calls "a semi-port from Ares" | every opcode: registers, flags, WZ, Q, R, memory, I/O, T-states, and each memory access's kind, address, value and order | anything its generator gets wrong; interrupts |
+| FUSE 1.6.0 `z80/tests` | emulator-derived | FUSE's own core | 1,356 single-instruction cases with bus events | where FUSE predates later findings (six cases, listed below) |
+| superzazu/z80 cross-check | emulator-derived | an independent C core | the interrupt lifecycle: IM 0/1/2, NMI, EI delay, HALT | its own IM 0 bug (one xfail) |
+| UM0080; Young v0.91 | documentation | Zilog's manual; Young's measurements and reading | every handler's rule, cited in its docstring; prefix runs (Young 3.7) | behaviour neither describes (WZ, Q) |
+
+**Bus-transaction order has no hardware oracle at all.** Every hardware-tier
+oracle compares state, not the sequence of accesses that produced it, so the
+order claim below rests on SingleStepTests' pin traces and FUSE's bus events,
+two emulator-derived sources that agree.
 
 ## Certification record: commit `9e15acc` (2026-09-06)
 
@@ -87,7 +112,10 @@ TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases
 Two claims are separated here, because the evidence supports one and not the
 other.
 
-**Certified: which accesses happen, and in what order.** Each SingleStepTests
+**Checked against emulator-derived pin traces: which accesses happen, and in
+what order.** No hardware-captured oracle observes bus order (see
+[Oracle tiers](#oracle-tiers)); this claim is exactly as strong as
+SingleStepTests' generator, cross-checked by FUSE's bus events. Each SingleStepTests
 case's `cycles` array marks a memory read with the pin string `r-m-`, whose data
 byte latches on the following entry, and a memory write with `-wm-`, which
 carries its value inline. `VectorCPU` records every `read_byte`/`write_byte` the
@@ -177,19 +205,20 @@ so here rather than in the code.
 
 ## Hardware-oracle validation (z80test)
 
-SingleStepTests and ZEXALL both validate against corpora ultimately derived
-from other software (SingleStepTests from a corrected Ares core; ZEXALL by
-construction checks internal CRC self-consistency, not an external
-reference). Neither is a claim against real silicon.
+SingleStepTests is emulator-derived: its generator is, in its README's words,
+"a semi-port from Ares". ZEXDOC and ZEXALL are hardware-captured but coarse:
+each compares one CRC per instruction group with "an expected value that was
+found empirically on a real Z80" (zexall.z80's header), so a failure names a
+group, not a case, and WZ, Q, R, I/O and T-states never reach the CRC.
 
-[raxoft/z80test](https://github.com/raxoft/z80test) closes that gap for the
-instructions and flags it covers: its expected values were captured by
-executing on a real 48K ZX Spectrum with a genuine Zilog Z80. The
+[raxoft/z80test](https://github.com/raxoft/z80test) is hardware-captured at a
+finer grain, for the instructions and flags it covers: its expected values
+were captured by executing on a real 48K ZX Spectrum with a genuine Zilog Z80. The
 `validation.z80test_runner` adapter replaces the two ROM touchpoints the test
 programs use for output (`RST 0x10` and `CHAN-OPEN`) with a 3-byte stub that
 has no effect on tested CPU state; no ROM image is used or required. Fetch
 the pinned, MIT-licensed release with `python scripts/fetch_z80test.py`, then
-run `python -m pytest tests/test_z80test_suite.py -m integration -q`.
+run `python -m pytest tests/test_z80test_suite.py -q`.
 
 `z80full`, `z80memptr`, and `z80ccf` all report `Result: all tests passed.`
 (`z80full` subsumes `z80doc`, `z80flags`, and `z80docflags`; `z80ccfscr` is a
@@ -253,7 +282,7 @@ scenarios spanning all three interrupt modes, NMI/HALT interaction, RETN's
 IFF1 restoration, the EI delay, DI-masking without losing a pending request,
 and NMI-vs-maskable priority. Fetch and build the pinned oracle with
 `python scripts/fetch_interrupt_oracle.py`, then run
-`python -m pytest tests/test_interrupt_crosscheck.py -m integration -q`.
+`python -m pytest tests/test_interrupt_crosscheck.py -q`.
 
 Nine of ten scenarios match exactly, including T-state totals. The tenth
 (IM 0 with a device-supplied RST) is a known bug in the oracle, not this
