@@ -46,6 +46,18 @@ fact; entries from 0.4.0 onward are written as the work lands.
   1.5 -> 33, block_io 42 -> 47. Full table in docs/validation.md, "Speed".
 - ZEXDOC and ZEXALL recertified at `695e47f` on PyPy: 278.2 s and 276.5 s.
 
+### Changed (tests)
+
+- **The test suite is 30 files and 5,951 lines, from 178 and 15,252.** The
+  191 hand-written single-instruction test files (per-opcode witnesses and
+  the small per-family unit files) became nine family files of data rows,
+  `Row(program, t_states, initial, changes)`, each checked in full by
+  `conftest.check_step`: every register, every byte of memory, every port
+  write and the T-states. The rows were recorded from the old tests and
+  reproduce each of their 910 steps exactly. The 161 copies of `MemoryCPU`
+  are one shared host in `tests/conftest.py`, and `tests/test_z80.py` lost
+  its inline fallback copy of `validation/vector_utils.py`.
+
 ### Added
 
 - `benchmarks/compare_revisions.py`, the same-process A/B the ladder was
