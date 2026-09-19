@@ -77,18 +77,6 @@ class IndexMixin:
         self.q = 0
         return 20
 
-    def _op_ld_a_index_h(self, prefix: int) -> int:
-        """LD A,IXH/IYH"""
-        self.a = self._index_high_byte(prefix)
-        self.q = 0
-        return 8
-
-    def _op_ld_a_index_l(self, prefix: int) -> int:
-        """LD A,IXL/IYL"""
-        self.a = self._index_low_byte(prefix)
-        self.q = 0
-        return 8
-
     def _op_ld_r_index_byte(self, prefix: int, sub_opcode: int) -> int:
         """LD r,IXH/IXL/IYH/IYL"""
         value = (
@@ -146,101 +134,20 @@ class IndexMixin:
         self.q = self._f
         return 8
 
-    def _op_add_a_index_h(self, prefix: int) -> int:
-        """ADD A,IXH/IYH"""
-        self._alu_a(0, self._index_high_byte(prefix))
+    def _op_alu_index_byte(self, prefix: int, sub_opcode: int) -> int:
+        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,IXH/IXL/IYH/IYL -- the 8-bit ALU on an index half."""
+        high = (sub_opcode & 0x07) == 4
+        value = self._index_high_byte(prefix) if high else self._index_low_byte(prefix)
+        self._alu_a((sub_opcode >> 3) & 0x07, value)
         self.q = self._f
         return 8
 
-    def _op_add_a_index_l(self, prefix: int) -> int:
-        """ADD A,IXL/IYL"""
-        self._alu_a(0, self._index_low_byte(prefix))
+    def _op_alu_index_mem(self, prefix: int, sub_opcode: int) -> int:
+        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,(IX+d)/(IY+d) -- the 8-bit ALU on indexed memory."""
+        addr = self._index_displacement_addr(prefix)
+        self._alu_a((sub_opcode >> 3) & 0x07, self.read_byte(addr))
         self.q = self._f
-        return 8
-
-    def _op_adc_a_index_h(self, prefix: int) -> int:
-        """ADC A,IXH/IYH"""
-        self._alu_a(1, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_adc_a_index_l(self, prefix: int) -> int:
-        """ADC A,IXL/IYL"""
-        self._alu_a(1, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_sub_a_index_h(self, prefix: int) -> int:
-        """SUB A,IXH/IYH"""
-        self._alu_a(2, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_sub_a_index_l(self, prefix: int) -> int:
-        """SUB A,IXL/IYL"""
-        self._alu_a(2, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_sbc_a_index_h(self, prefix: int) -> int:
-        """SBC A,IXH/IYH"""
-        self._alu_a(3, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_sbc_a_index_l(self, prefix: int) -> int:
-        """SBC A,IXL/IYL"""
-        self._alu_a(3, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_and_a_index_h(self, prefix: int) -> int:
-        """AND A,IXH/IYH"""
-        self._alu_a(4, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_and_a_index_l(self, prefix: int) -> int:
-        """AND A,IXL/IYL"""
-        self._alu_a(4, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_xor_a_index_h(self, prefix: int) -> int:
-        """XOR A,IXH/IYH"""
-        self._alu_a(5, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_xor_a_index_l(self, prefix: int) -> int:
-        """XOR A,IXL/IYL"""
-        self._alu_a(5, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_or_a_index_h(self, prefix: int) -> int:
-        """OR A,IXH/IYH"""
-        self._alu_a(6, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_or_a_index_l(self, prefix: int) -> int:
-        """OR A,IXL/IYL"""
-        self._alu_a(6, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_cp_a_index_h(self, prefix: int) -> int:
-        """CP A,IXH/IYH"""
-        self._alu_a(7, self._index_high_byte(prefix))
-        self.q = self._f
-        return 8
-
-    def _op_cp_a_index_l(self, prefix: int) -> int:
-        """CP A,IXL/IYL"""
-        self._alu_a(7, self._index_low_byte(prefix))
-        self.q = self._f
-        return 8
+        return 19
 
     def _op_inc_index(self, prefix: int) -> int:
         """INC IX/IY -- no flags."""
@@ -363,41 +270,3 @@ class IndexMixin:
         self.write_byte(addr, self._read_operand_byte())
         self.q = 0
         return 19
-
-    def _indexed_alu(self, prefix: int, group: int) -> int:
-        addr = self._index_displacement_addr(prefix)
-        self._alu_a(group, self.read_byte(addr))
-        self.q = self._f
-        return 19
-
-    def _op_add_a_index_mem(self, prefix: int) -> int:
-        """ADD A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 0)
-
-    def _op_adc_a_index_mem(self, prefix: int) -> int:
-        """ADC A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 1)
-
-    def _op_sub_a_index_mem(self, prefix: int) -> int:
-        """SUB A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 2)
-
-    def _op_sbc_a_index_mem(self, prefix: int) -> int:
-        """SBC A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 3)
-
-    def _op_and_a_index_mem(self, prefix: int) -> int:
-        """AND A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 4)
-
-    def _op_xor_a_index_mem(self, prefix: int) -> int:
-        """XOR A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 5)
-
-    def _op_or_a_index_mem(self, prefix: int) -> int:
-        """OR A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 6)
-
-    def _op_cp_a_index_mem(self, prefix: int) -> int:
-        """CP A,(IX+d)/(IY+d)"""
-        return self._indexed_alu(prefix, 7)
