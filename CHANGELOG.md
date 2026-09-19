@@ -30,8 +30,26 @@ fact; entries from 0.4.0 onward are written as the work lands.
   `>=3.11` because PyPy's newest release is Python 3.11; the floor follows
   PyPy and rises when PyPy supports 3.12.
 
+### Changed (speed)
+
+- **2.5x faster on CPython, 2x on PyPy (22x for IX/IY code).** An ablation
+  ladder, one commit per change, every oracle green at each, each measured
+  with `benchmarks/compare_revisions.py` (both revisions in one interpreter,
+  alternated on one pinned core):
+  one 256-entry table per opcode page (A); F kept as one int and computed in
+  one expression per instruction (B); Q written in place (D); the 26
+  near-identical IX/IY ALU and LD handlers folded into three (E); opcode
+  fetch and dispatch inside `step()` (F). A register file read through
+  `getattr` (C) measured slower and was reverted. Pre-polish `651b7bf`
+  against `695e47f`: CPython 3.14 base 1.08 -> 2.73 M instr/s, indexed_cb
+  0.54 -> 1.42, block_io 0.93 -> 1.93; PyPy base 34 -> 67, indexed_cb
+  1.5 -> 33, block_io 42 -> 47. Full table in docs/validation.md, "Speed".
+- ZEXDOC and ZEXALL recertified at `695e47f` on PyPy: 278.2 s and 276.5 s.
+
 ### Added
 
+- `benchmarks/compare_revisions.py`, the same-process A/B the ladder was
+  measured with.
 - **Memory bus transaction certification.** `VectorCPU` records every
   `read_byte`/`write_byte` an instruction performs, and `run_test_case`
   compares that sequence against the pin strobes in each SingleStepTests

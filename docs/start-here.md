@@ -165,6 +165,9 @@ while True:
   that breaks this, so all 1,604,000 cases certify it.
 - The four callables are plain attributes of the CPU and may be replaced at
   any time.
+- Under PyPy, pass a bytearray's own `__getitem__`/`__setitem__` where you
+  can: they ran the base workload at 71 M instructions/s against 47 M for
+  Python closures over the same bytearray (docs/validation.md, "Speed").
 - `step()` returns the instruction's (or interrupt's) T-states; the host keeps
   the clock. Registers are plain attributes the host may read and set.
 - RESET, NMI and maskable interrupts are requested by method, between steps:

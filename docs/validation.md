@@ -134,6 +134,16 @@ Both programs reported `Tests complete` with no `ERROR ****` report. The
 post-refactor CPython combined run passed in 11,028.71 seconds; the PyPy run
 passed in 677.50 seconds.
 
+**Recertified at `695e47f` (2026-09-18)**, after the 0.4.0 speed ladder
+changed the dispatch, the flag representation and the fetch path. PyPy
+7.3.20 / Python 3.11.13, each program run alone on one pinned core of a
+shared, loaded machine, through `validation.zex.ZexRunner` driven by
+`step()`: ZEXDOC 67/67 tests `OK`, `Tests complete`, 5,764,169,474
+instructions, 278.2 s; ZEXALL 67/67 `OK`, `Tests complete`, 5,764,169,474
+instructions, 276.5 s. Same SHA-256 as above. CPython was not rerun; the
+certification policy needs one interpreter per semantic change, and the
+SingleStepTests, z80test and FUSE gates ran on CPython at every rung.
+
 The 0.2.0 release candidate was recertified under PyPy 7.3.20 / Python 3.11.13
 after the RESET, state, disassembly, and debugger additions. ZEXDOC passed in
 470.43 seconds and ZEXALL passed in 426.77 seconds; the combined integration run
@@ -145,7 +155,7 @@ https://github.com/agn453/ZEXALL into an external directory, verify the hashes,
 then run:
 
 ```text
-Z80_PYTHON_ZEX_DIR=<directory> python -m pytest tests/test_zex_integration.py -m integration -q --durations=2
+Z80_PYTHON_ZEX_DIR=<directory> python -m pytest tests/test_zex_integration.py -q --durations=2
 ```
 
 On PowerShell, set `$env:Z80_PYTHON_ZEX_DIR` first. The tests use a finite
@@ -264,7 +274,67 @@ one genuinely unconfirmed corner this surfaced: an opt-in, off-by-default
 NMOS erratum sourced from gate-level simulation rather than a hardware
 measurement.
 
-## Performance record
+## Speed: the 0.4.0 ablation ladder
+
+0.4.0 made the core faster one change at a time, each change a commit that
+had to pass every oracle and to measure faster, or be reverted. Six rungs were
+tried: the five the polish brief named (A-E) and one more (F) added when the
+base workload still sat just under the 2.5 M instructions/s target. The table
+gives each rung's speed as a ratio to the commit before it.
+
+**Method.** The machine (i9-13900K, shared) carried a 20-core job from other
+users throughout, and separate benchmark runs moved by +-30%, which buries a
+5-10% change. Each ratio was therefore measured with
+`benchmarks/compare_revisions.py`, which imports both revisions into one
+interpreter and times the three workloads alternately on one pinned
+performance core, best of N samples in CPU time. Interference only ever slows
+a sample, so the best sample recovers the undisturbed rate, and both sides
+see the same load. CPython 3.14.4, 30 rounds of 50,000 instructions; PyPy
+7.3.20 / Python 3.11.13, 12 rounds of 3,000,000.
+
+| Rung | Commit | CPython base | indexed_cb | block_io | PyPy base | indexed_cb | block_io |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Callable bus (decision 1, not a rung) | `764ddd8` | x1.01 | x1.07 | x1.06 | x0.68-0.86 | x1.12-1.17 | x0.83 |
+| A: one 256-entry table per opcode page | `090fa0c` | x1.32 | x2.33 | x1.15 | x1.59 | x15.1 | x1.32 |
+| B: F as one int, one expression per instruction | `88ea008` | x1.59 | x1.20 | x1.30 | x1.10 | x0.94 | x1.05 |
+| C: register file through `getattr` | reverted | x0.93 | x0.91 | x1.01 | x0.93 | x1.00 | x1.07 |
+| D: Q written in place, no `_update_q` call | `c48395c` | x1.11 | x1.02 | x1.03 | x1.05 | x1.12 | x0.95 |
+| E: 26 IX/IY ALU and LD handlers become three | `a48341b` | x1.00 | x1.01 | x1.00 | -- | -- | -- |
+| F: opcode fetch and dispatch inside `step()` | `695e47f` | x1.23 | x1.11 | x1.15 | x1.03 | x1.09 | x1.07 |
+
+The callable bus is the one change that cost PyPy speed (two runs shown as a
+range). The old hosts' `read_byte` was a class method the JIT could inline to
+an array access; a callable held in an instance attribute is loaded and
+called on every access. The contract was decided for the family's sake, not
+for speed, and the ladder repaid the cost several times over. Among callable
+hosts, a bytearray's own methods are the fast choice on PyPy: at `695e47f`
+they ran the base workload at 71 M/s against 47 M/s for Python closures over
+the same bytearray. Rung C was measured and reverted: a
+same-process micro-benchmark of the benchmark's register mix also put the
+existing if-chain first (27-33 ns per five reads against 34-38 ns). Rung E is
+a readability rung; no workload uses the forms it touched.
+
+**End to end**, pre-polish `main` against the end of the ladder, same method:
+
+```text
+python benchmarks/compare_revisions.py 651b7bf 695e47f
+```
+
+| Workload | CPython `651b7bf` | CPython `695e47f` | Change | PyPy `651b7bf` | PyPy `695e47f` | Change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1.078 M/s | 2.729 M/s | x2.53 | 34.1 M/s | 66.6 M/s | x1.95 |
+| indexed_cb | 0.543 M/s | 1.418 M/s | x2.61 | 1.50 M/s | 33.0 M/s | x22.0 |
+| block_io | 0.934 M/s | 1.926 M/s | x2.06 | 41.9 M/s | 46.5 M/s | x1.11 |
+
+The absolute rates are best samples on a loaded machine and are lower bounds;
+the ratios are the result. The polish brief quoted a "base" baseline of
+586,045 instructions/s; that figure was the indexed_cb workload's, and the
+base workload measured 1.1 M/s before the ladder began. PyPy's 22-fold gain on
+indexed_cb comes from rung A: the old DD/FD decoder rebuilt two dictionaries
+of bound methods on every prefixed instruction, which the JIT could not
+compile away.
+
+## Performance record (0.3.0 and earlier)
 
 On Windows 11, PyPy 7.3.20 / Python 3.11.13 produced warmed median rates of
 55.55M instructions/s for the base workload, 4.11M for indexed/CB, and 56.33M
