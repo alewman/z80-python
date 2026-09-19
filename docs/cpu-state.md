@@ -38,11 +38,11 @@ rewind and must not be presented as a complete emulator save state.
 
 ```python
 before = cpu.capture_state()
-memory_before = bytes(cpu.memory)  # Host-specific state.
+memory_before = bytes(memory)  # The host's, not the CPU's.
 
 cpu.step()
 
-cpu.memory[:] = memory_before
+memory[:] = memory_before
 cpu.restore_state(before)
 assert cpu.capture_state() == before
 ```

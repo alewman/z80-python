@@ -3,30 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from z80_python import Z80CPU
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by flat memory and simple I/O ports."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
-        self.ports: dict[int, int] = {}
-        self.port_writes: list[tuple[int, int]] = []
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return self.ports[addr & 0xFFFF]
-
-    def write_port(self, addr: int, value: int) -> None:
-        self.port_writes.append((addr & 0xFFFF, value & 0xFF))
+from conftest import MemoryCPU
 
 
 def _run(cpu: MemoryCPU, opcode_bytes: bytes) -> int:

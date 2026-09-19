@@ -125,37 +125,27 @@ avoid ambiguity with the unrelated `z80` distribution on PyPI.
 
 ## Minimal host
 
-A machine subclasses `Z80CPU` and supplies its 16-bit memory and I/O spaces:
+The host owns memory and devices and passes the CPU its buses as callables.
+The core always passes a 16-bit address and an 8-bit value, so a bytearray's
+own methods are a complete memory:
 
 ```python
 from z80_python import Z80CPU
 
-
-class Machine(Z80CPU):
-    def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
-        self.ports = bytearray(0x10000)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return self.ports[addr & 0xFFFF]
-
-    def write_port(self, addr: int, value: int) -> None:
-        self.ports[addr & 0xFFFF] = value & 0xFF
-
-
-cpu = Machine()
-cpu.memory[:3] = bytes((0x3E, 0x2A, 0x3C))  # LD A,2Ah; INC A
+memory = bytearray(0x10000)
+cpu = Z80CPU(memory.__getitem__, memory.__setitem__)  # read_byte, write_byte
+memory[:3] = bytes((0x3E, 0x2A, 0x3C))  # LD A,2Ah; INC A
 assert cpu.step() == 7
 assert cpu.step() == 4
 assert cpu.a == 0x2B
 ```
+
+Devices on the I/O bus come in as `read_port=` and `write_port=`; without them
+`IN` reads 0xFF and `OUT` goes nowhere. This is the embedding contract of the
+whole family: [m6800-python](https://github.com/alewman/m6800-python) takes its
+bus the same way. [start-here](docs/start-here.md#the-embedding-contract) has
+the rest. Until 0.4.0 a host subclassed `Z80CPU` and defined the four bus
+methods; that form now raises a `TypeError` naming this one.
 
 `step()` advances one instruction or accepted lifecycle boundary and returns its
 documented T-state total. Registers and modeled processor state are directly

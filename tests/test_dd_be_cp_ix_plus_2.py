@@ -13,27 +13,7 @@ to the effective address 0x4002, latch Q to 0x9A, and consume 19 T-states.
 
 from __future__ import annotations
 
-from z80_python import Z80CPU
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by a flat 64 KiB bytearray."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        raise NotImplementedError("unit-test CPU does not model I/O ports")
-
-    def write_port(self, addr: int, value: int) -> None:
-        raise NotImplementedError("unit-test CPU does not model I/O ports")
+from conftest import MemoryCPU
 
 
 def test_dd_be_cp_a_mem_at_ix_plus_2() -> None:

@@ -51,6 +51,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conftest import MemoryCPU
 
 from validation.vector_utils import assert_state_equal, load_json_vector, run_test_case
 from z80_python.cpu import (
@@ -61,28 +62,7 @@ from z80_python.cpu import (
     FLAG_X,
     FLAG_Y,
     FLAG_Z,
-    Z80CPU,
 )
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by a flat 64 KiB bytearray."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        raise NotImplementedError("unit-test CPU does not model I/O ports")
-
-    def write_port(self, addr: int, value: int) -> None:
-        raise NotImplementedError("unit-test CPU does not model I/O ports")
 
 
 def _run(cpu: MemoryCPU, opcode_bytes: bytes) -> int:

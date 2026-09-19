@@ -103,40 +103,66 @@ class VectorCPU(Z80CPU):
     """
 
     def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
+        memory = self.memory = bytearray(0x10000)
         #: Queue of ``(addr, value)`` port reads supplied by the vector.
-        self.port_inputs: list[tuple[int, int]] = []
+        port_inputs: list[tuple[int, int]] = []
+        self.port_inputs = port_inputs
         #: Recorded ``(addr, value)`` port writes, in execution order.
-        self.port_outputs: list[tuple[int, int]] = []
+        port_outputs: list[tuple[int, int]] = []
+        self.port_outputs = port_outputs
         #: Recorded ``("MR"|"MW", addr, value)`` memory accesses, in bus order.
-        self.memory_transactions: list[tuple[str, int, int]] = []
+        transactions: list[tuple[str, int, int]] = []
+        self.memory_transactions = transactions
 
-    def read_byte(self, addr: int) -> int:
-        value = self.memory[addr & 0xFFFF]
-        self.memory_transactions.append(("MR", addr & 0xFFFF, value))
-        return value
+        # The bus is strict rather than masking: an address outside 16 bits or
+        # a value outside 8 fails the case, so every SingleStepTests case also
+        # certifies the embedding contract's promise that hosts never mask.
+        # The callables close over the host's lists, not over self: a bound
+        # method would make each CPU a reference cycle that only the cyclic
+        # collector frees, and this runner builds 1.6 million of them.
 
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory_transactions.append(("MW", addr & 0xFFFF, value & 0xFF))
-        self.memory[addr & 0xFFFF] = value & 0xFF
+        def read_memory(addr: int) -> int:
+            if not 0 <= addr <= 0xFFFF:
+                _out_of_range(addr, 0)
+            value = memory[addr]
+            transactions.append(("MR", addr, value))
+            return value
 
-    def read_port(self, addr: int) -> int:
-        if not self.port_inputs:
-            raise AssertionError(
-                f"unexpected I/O port read at 0x{addr & 0xFFFF:04X}: "
-                "the vector provides no port input for this instruction"
-            )
-        expected_addr, value = self.port_inputs.pop(0)
-        if expected_addr != addr & 0xFFFF:
-            raise AssertionError(
-                f"I/O port read address mismatch: expected 0x{expected_addr:04X} "
-                f"(vector order), CPU read 0x{addr & 0xFFFF:04X}"
-            )
-        return value
+        def write_memory(addr: int, value: int) -> None:
+            if not (0 <= addr <= 0xFFFF and 0 <= value <= 0xFF):
+                _out_of_range(addr, value)
+            transactions.append(("MW", addr, value))
+            memory[addr] = value
 
-    def write_port(self, addr: int, value: int) -> None:
-        self.port_outputs.append((addr & 0xFFFF, value & 0xFF))
+        def read_port(addr: int) -> int:
+            if not 0 <= addr <= 0xFFFF:
+                _out_of_range(addr, 0)
+            if not port_inputs:
+                raise AssertionError(
+                    f"unexpected I/O port read at 0x{addr:04X}: "
+                    "the vector provides no port input for this instruction"
+                )
+            expected_addr, value = port_inputs.pop(0)
+            if expected_addr != addr:
+                raise AssertionError(
+                    f"I/O port read address mismatch: expected 0x{expected_addr:04X} "
+                    f"(vector order), CPU read 0x{addr:04X}"
+                )
+            return value
+
+        def write_port(addr: int, value: int) -> None:
+            if not (0 <= addr <= 0xFFFF and 0 <= value <= 0xFF):
+                _out_of_range(addr, value)
+            port_outputs.append((addr, value))
+
+        super().__init__(read_memory, write_memory, read_port=read_port, write_port=write_port)
+
+
+def _out_of_range(address: int, value: int) -> None:
+    raise AssertionError(
+        f"bus access out of range: address {address!r}, value {value!r} "
+        "(the core must pass a 16-bit address and an 8-bit value)"
+    )
 
 
 class OpcodeNotImplementedError(NotImplementedError):

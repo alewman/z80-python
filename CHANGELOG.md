@@ -9,6 +9,20 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ## [Unreleased] — 0.4.0.dev0
 
+### Breaking
+
+- **`Z80CPU` takes its bus as callables and is no longer an abstract base
+  class.** The constructor is `Z80CPU(read_byte, write_byte, *,
+  read_port=None, write_port=None)`, the embedding contract m6800-python
+  already uses. The port callables default to an unconnected bus (`IN`
+  reads 0xFF, `OUT` is discarded). A class that still defines the bus as
+  methods raises a `TypeError` naming the new form when it is defined.
+  Migration: instead of subclassing and defining `read_byte`, `write_byte`,
+  `read_port` and `write_port`, pass them in, for example
+  `Z80CPU(memory.__getitem__, memory.__setitem__)`. The core now promises
+  16-bit addresses and 8-bit values, so hosts need no masking; the
+  SingleStepTests host fails any case that breaks the promise.
+
 ### Changed
 
 - **CPython 3.11 is no longer tested.** CI runs CPython 3.12, 3.13 and 3.14

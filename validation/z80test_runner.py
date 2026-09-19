@@ -68,24 +68,23 @@ class _SpectrumHostCPU(Z80CPU):
     """Flat 64 KiB memory implementation used only by :class:`Z80TestRunner`."""
 
     def __init__(self) -> None:
-        super().__init__()
         self.memory = bytearray(0x10000)
         self.out_chars: list[str] = []
+        super().__init__(
+            self.memory.__getitem__,
+            self.memory.__setitem__,
+            read_port=self._read_port,
+            write_port=self._write_port,
+        )
 
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        if (addr & 0xFF) == 0xFE:
+    def _read_port(self, port: int) -> int:
+        if (port & 0xFF) == 0xFE:
             return 0xBF
         return 0xFF
 
-    def write_port(self, addr: int, value: int) -> None:
-        if (addr & 0xFF) == 0xFF:
-            self.out_chars.append(chr(value & 0xFF))
+    def _write_port(self, port: int, value: int) -> None:
+        if (port & 0xFF) == 0xFF:
+            self.out_chars.append(chr(value))
 
 
 @dataclass(frozen=True)

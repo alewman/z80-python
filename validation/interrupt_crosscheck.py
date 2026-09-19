@@ -128,26 +128,14 @@ class PyHost(Z80CPU):
     """Flat 64 KiB host used only by this cross-check."""
 
     def __init__(self) -> None:
-        super().__init__()
         self.memory = bytearray(0x10000)
         self.total_cyc = 0
+        super().__init__(self.memory.__getitem__, self.memory.__setitem__)
 
     def step(self) -> int:
         t = super().step()
         self.total_cyc += t
         return t
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return 0xFF
-
-    def write_port(self, addr: int, value: int) -> None:
-        pass
 
     def state(self) -> dict[str, int]:
         return {
