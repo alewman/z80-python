@@ -1,28 +1,7 @@
 """Lifecycle tests for host-requested Z80 maskable interrupts."""
 
 import pytest
-
-from z80_python import Z80CPU
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete host with a flat 64 KiB memory image."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return 0xFF
-
-    def write_port(self, addr: int, value: int) -> None:
-        pass
+from conftest import MemoryCPU
 
 
 def test_reset_has_priority_reinitializes_interrupt_execution_state_and_stays_asserted() -> None:

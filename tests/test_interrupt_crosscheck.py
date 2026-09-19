@@ -28,7 +28,6 @@ _KNOWN_ORACLE_BUGS = {
 }
 
 
-@pytest.mark.integration
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=[s.name for s in SCENARIOS])
 def test_interrupt_scenario_matches_independent_core(scenario) -> None:
     """Deliberately adversarial interrupt scenarios must match a second core."""

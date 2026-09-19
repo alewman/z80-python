@@ -103,40 +103,66 @@ class VectorCPU(Z80CPU):
     """
 
     def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
+        memory = self.memory = bytearray(0x10000)
         #: Queue of ``(addr, value)`` port reads supplied by the vector.
-        self.port_inputs: list[tuple[int, int]] = []
+        port_inputs: list[tuple[int, int]] = []
+        self.port_inputs = port_inputs
         #: Recorded ``(addr, value)`` port writes, in execution order.
-        self.port_outputs: list[tuple[int, int]] = []
+        port_outputs: list[tuple[int, int]] = []
+        self.port_outputs = port_outputs
         #: Recorded ``("MR"|"MW", addr, value)`` memory accesses, in bus order.
-        self.memory_transactions: list[tuple[str, int, int]] = []
+        transactions: list[tuple[str, int, int]] = []
+        self.memory_transactions = transactions
 
-    def read_byte(self, addr: int) -> int:
-        value = self.memory[addr & 0xFFFF]
-        self.memory_transactions.append(("MR", addr & 0xFFFF, value))
-        return value
+        # The bus is strict rather than masking: an address outside 16 bits or
+        # a value outside 8 fails the case, so every SingleStepTests case also
+        # certifies the embedding contract's promise that hosts never mask.
+        # The callables close over the host's lists, not over self: a bound
+        # method would make each CPU a reference cycle that only the cyclic
+        # collector frees, and this runner builds 1.6 million of them.
 
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory_transactions.append(("MW", addr & 0xFFFF, value & 0xFF))
-        self.memory[addr & 0xFFFF] = value & 0xFF
+        def read_memory(addr: int) -> int:
+            if not 0 <= addr <= 0xFFFF:
+                _out_of_range(addr, 0)
+            value = memory[addr]
+            transactions.append(("MR", addr, value))
+            return value
 
-    def read_port(self, addr: int) -> int:
-        if not self.port_inputs:
-            raise AssertionError(
-                f"unexpected I/O port read at 0x{addr & 0xFFFF:04X}: "
-                "the vector provides no port input for this instruction"
-            )
-        expected_addr, value = self.port_inputs.pop(0)
-        if expected_addr != addr & 0xFFFF:
-            raise AssertionError(
-                f"I/O port read address mismatch: expected 0x{expected_addr:04X} "
-                f"(vector order), CPU read 0x{addr & 0xFFFF:04X}"
-            )
-        return value
+        def write_memory(addr: int, value: int) -> None:
+            if not (0 <= addr <= 0xFFFF and 0 <= value <= 0xFF):
+                _out_of_range(addr, value)
+            transactions.append(("MW", addr, value))
+            memory[addr] = value
 
-    def write_port(self, addr: int, value: int) -> None:
-        self.port_outputs.append((addr & 0xFFFF, value & 0xFF))
+        def read_port(addr: int) -> int:
+            if not 0 <= addr <= 0xFFFF:
+                _out_of_range(addr, 0)
+            if not port_inputs:
+                raise AssertionError(
+                    f"unexpected I/O port read at 0x{addr:04X}: "
+                    "the vector provides no port input for this instruction"
+                )
+            expected_addr, value = port_inputs.pop(0)
+            if expected_addr != addr:
+                raise AssertionError(
+                    f"I/O port read address mismatch: expected 0x{expected_addr:04X} "
+                    f"(vector order), CPU read 0x{addr:04X}"
+                )
+            return value
+
+        def write_port(addr: int, value: int) -> None:
+            if not (0 <= addr <= 0xFFFF and 0 <= value <= 0xFF):
+                _out_of_range(addr, value)
+            port_outputs.append((addr, value))
+
+        super().__init__(read_memory, write_memory, read_port=read_port, write_port=write_port)
+
+
+def _out_of_range(address: int, value: int) -> None:
+    raise AssertionError(
+        f"bus access out of range: address {address!r}, value {value!r} "
+        "(the core must pass a 16-bit address and an 8-bit value)"
+    )
 
 
 class OpcodeNotImplementedError(NotImplementedError):
@@ -650,18 +676,18 @@ def _main() -> None:
         assert cpu.read_byte(0x0100) == 0x00, hex(cpu.read_byte(0x0100))
 
         # Error path: this core implements every opcode, so stage the condition
-        # a port's unfinished core would produce, a decode that raises
+        # a port's unfinished core would produce, a step that raises
         # NotImplementedError, and check it surfaces as the named exception.
         unsupported_case = {
             "initial": {**case["initial"], "ram": [[0x0100, 0xDD], [0x0101, 0xED]]},
             "final": case["final"],
         }
 
-        def unfinished_decode(self: VectorCPU) -> int:
+        def unfinished_step(self: VectorCPU) -> int:
             raise NotImplementedError(f"unhandled opcode 0xDD at PC 0x{self.pc:04X}")
 
-        real_decode = VectorCPU.decode_and_execute
-        VectorCPU.decode_and_execute = unfinished_decode  # type: ignore[method-assign]
+        real_step = VectorCPU.step
+        VectorCPU.step = unfinished_step  # type: ignore[method-assign]
         try:
             run_test_case(unsupported_case)
         except OpcodeNotImplementedError as exc:
@@ -674,25 +700,12 @@ def _main() -> None:
                 "run_test_case should raise OpcodeNotImplementedError for an unsupported opcode"
             )
         finally:
-            VectorCPU.decode_and_execute = real_decode  # type: ignore[method-assign]
+            VectorCPU.step = real_step  # type: ignore[method-assign]
 
-        # Happy path: temporarily substitute a NOP implementation for the
-        # skeleton's decode_and_execute and confirm run_test_case reproduces
-        # the embedded sample's expected final state end-to-end (the sample is
-        # a NOP case, so final differs from initial only in pc and r).
-        real_decode = VectorCPU.decode_and_execute
-
-        def fake_nop_decode(self: VectorCPU) -> int:
-            self.pc = (self.pc + 1) & 0xFFFF
-            self._inc_r()
-            self._update_q(False)
-            return 4
-
-        VectorCPU.decode_and_execute = fake_nop_decode
-        try:
-            actual = run_test_case(case)
-        finally:
-            VectorCPU.decode_and_execute = real_decode
+        # Happy path: the embedded sample is a NOP case, so run_test_case must
+        # reproduce its final state end to end (it differs from the initial
+        # state only in pc and r).
+        actual = run_test_case(case)
         assert_state_equal(case["final"], actual)
         assert actual["pc"] == case["final"]["pc"], actual["pc"]
         assert actual["r"] == case["final"]["r"], actual["r"]

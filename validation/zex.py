@@ -25,20 +25,21 @@ class _CPMCPU(Z80CPU):
     """Flat 64 KiB memory implementation used only by :class:`ZexRunner`."""
 
     def __init__(self) -> None:
-        super().__init__()
         self.memory = bytearray(0x10000)
+        super().__init__(
+            self.memory.__getitem__,
+            self.memory.__setitem__,
+            read_port=_refuse_port_read,
+            write_port=_refuse_port_write,
+        )
 
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
 
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
+def _refuse_port_read(port: int) -> int:
+    raise ZexRunError(f"ZEX attempted an unexpected I/O read at 0x{port:04X}")
 
-    def read_port(self, addr: int) -> int:
-        raise ZexRunError(f"ZEX attempted an unexpected I/O read at 0x{addr:04X}")
 
-    def write_port(self, addr: int, value: int) -> None:
-        raise ZexRunError(f"ZEX attempted an unexpected I/O write at 0x{addr:04X}")
+def _refuse_port_write(port: int, value: int) -> None:
+    raise ZexRunError(f"ZEX attempted an unexpected I/O write at 0x{port:04X}")
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,6 @@ class ZexRunner:
                 continue
             if self.cpu.halted:
                 raise ZexRunError(f"ZEX halted unexpectedly at PC 0x{self.cpu.pc:04X}")
-            t_states += self.cpu.decode_and_execute()
+            t_states += self.cpu.step()
             instructions += 1
-        raise ZexRunError(f"ZEX did not terminate within {max_instructions:,} instructions")  # noqa: W292
+        raise ZexRunError(f"ZEX did not terminate within {max_instructions:,} instructions")

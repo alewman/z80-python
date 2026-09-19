@@ -7,10 +7,17 @@ package root and listed in each public module's `__all__`.
 
 The supported surface includes:
 
-- `Z80CPU`, `Flags`, and flag constants;
+- `Z80CPU`, its constructor `Z80CPU(read_byte, write_byte, *, read_port=None,
+  write_port=None)` (the embedding contract in
+  [start-here](start-here.md#the-embedding-contract)), `Flags`, and flag
+  constants;
 - `CPUState` capture and restoration;
 - `Instruction` and disassembly functions;
-- `DebugSession`, its protocols, enums, and immutable result values;
+- `DebugSession`, its protocols, enums, and immutable result values, including
+  access tracking (`track_accesses=`, `StepRecord.accesses`, `Access`),
+  watchpoints (`add_watchpoint`, `StopReason.WATCHPOINT`, `RunResult.hits`) and
+  `next_boundary`;
+- the `python -m z80_python` command line and `console.parse_number`;
 - `z80_python.conformance`: `Manifest` and its parts, `ConformanceHost`,
   `trace_manifest`, `diff_manifest`, the manifest JSON form, and the command line;
 - `CommandDebugger` and command result/error values; and
@@ -37,7 +44,10 @@ format.
 
 - Patch releases fix defects without intentional public incompatibilities.
 - Minor releases may add fields or APIs while preserving existing consumers.
-- Breaking public changes require a major release and migration notes.
+- Breaking public changes require a major release and migration notes, with
+  one exception: before 1.0, a minor release may break the public surface
+  when `CHANGELOG.md` says so under a **Breaking** heading with the
+  migration. 0.4.0 does this once, for the callable embedding contract.
 - Hardware-fidelity claims remain bounded by the validation and lifecycle scope;
   API stability does not expand those claims.
 

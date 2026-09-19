@@ -3,13 +3,13 @@
 from dataclasses import replace
 
 import pytest
+from conftest import MemoryCPU
 
-from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import BoundaryKind, DebugSession, DebugTarget, RunResult, StopReason
 
 
-def _session(program: bytes, *, history_limit: int = 256) -> tuple[MinimalZ80Host, DebugSession]:
-    cpu = MinimalZ80Host()
+def _session(program: bytes, *, history_limit: int = 256) -> tuple[MemoryCPU, DebugSession]:
+    cpu = MemoryCPU()
     cpu.memory[: len(program)] = program
     return cpu, DebugSession(cpu, peek_byte=cpu.memory.__getitem__, history_limit=history_limit)
 
@@ -123,7 +123,7 @@ def test_history_is_bounded_clearable_and_optionally_disabled() -> None:
 
 
 def test_session_without_peek_retains_execution_control() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     cpu.memory[0] = 0x00
     session = DebugSession(cpu)
 
@@ -134,7 +134,7 @@ def test_session_without_peek_retains_execution_control() -> None:
 
 
 def test_debug_target_is_a_runtime_checkable_structural_protocol() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
 
     assert isinstance(cpu, DebugTarget)
     assert not isinstance(object(), DebugTarget)

@@ -14,15 +14,10 @@ import pytest
 
 from validation.zex import ZexRunner
 
-_ZEX_DIR = (
-    Path(os.environ["Z80_PYTHON_ZEX_DIR"])
-    if "Z80_PYTHON_ZEX_DIR" in os.environ
-    else None
-)
+_ZEX_DIR = Path(os.environ["Z80_PYTHON_ZEX_DIR"]) if "Z80_PYTHON_ZEX_DIR" in os.environ else None
 
 
 @pytest.mark.slow
-@pytest.mark.integration
 @pytest.mark.parametrize("program_name", ("zexdoc.com", "zexall.com"))
 def test_zex_exerciser_completes_without_crc_errors(program_name: str) -> None:
     """The authoritative long-sequence exercisers must report their own success."""

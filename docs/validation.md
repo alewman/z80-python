@@ -2,18 +2,84 @@
 
 ## Claim
 
-`z80-python` is a **SingleStep-complete, ZEXDOC/ZEXALL-certified pure-Python
-Z80 instruction core**. The claim covers instruction-level semantic state and
-long execution sequences. It includes a deterministic instruction-boundary model for
-RESET, maskable interrupt acceptance/service, NMI, EI delay, and HALT wakeup. It does
-not claim cycle-accurate external bus signaling, a complete Z80 machine, CP/M, device
-scheduling, or memory contention. It does claim the memory and I/O accesses
-themselves -- which ones happen, to which addresses, with which values, in which
-order -- certified against hardware-corrected pin traces; see
-[Bus transactions](#bus-transactions).
+`z80-python` is a pure-Python Z80 instruction core that agrees with every
+oracle below, each named with its tier. Against **hardware-captured** values it
+passes raxoft z80test's `z80full`, `z80memptr` and `z80ccf` (every flag, WZ and
+the SCF/CCF Q rule for the instructions z80test covers) and ZEXDOC/ZEXALL
+(long-sequence CRCs found on a real Z80). Against **emulator-derived** values it
+passes all 1,604,000 SingleStepTests cases (registers, flags, WZ, Q, R, memory,
+I/O, T-states and memory-access order for every opcode), 1,350 of FUSE's 1,356
+cases with the six others explained, and an interrupt-lifecycle cross-check
+against an independent core. Runs of DD/FD prefixes rest on **documentation**
+alone. The model includes RESET, maskable interrupts, NMI, the EI delay and
+HALT wakeup at instruction boundaries. It does not claim cycle-accurate bus
+signalling, a complete machine, CP/M, device scheduling or memory contention.
 
 The specific lifecycle contract, mode coverage, and remaining exclusions are in
 [interrupt-lifecycle.md](interrupt-lifecycle.md).
+
+## Oracle tiers
+
+Oracles are ranked by where their expected values came from:
+**hardware-captured > hardware-corrected > emulator-derived > documentation**.
+A lower-tier oracle is a detector, never a judge: when two disagree, the higher
+tier decides, and a claim is only as strong as the highest tier that checks it.
+
+| Oracle | Tier | Where its expected values came from | What it checks here | What it cannot see |
+| --- | --- | --- | --- | --- |
+| raxoft z80test 1.2a: `z80full`, `z80memptr`, `z80ccf` | hardware-captured | CRCs recorded on a 48K ZX Spectrum's Zilog NMOS Z80 | every flag (X/Y included) and register for most instructions; WZ through a following `BIT n,(HL)`; SCF/CCF after every instruction (Q) | T-states, bus order, interrupts, R, `RST`, prefix runs |
+| ZEXDOC / ZEXALL (Cringle 1994) | hardware-captured | per-group CRCs "found empirically on a real Z80" (the program's own source) | long sequences of register, flag (ZEXALL: X/Y too) and memory state | WZ, Q, R, I/O, HALT, T-states, interrupts; a CRC names a group, not a case |
+| (none for the Z80) | hardware-corrected | -- | -- | -- |
+| SingleStepTests/z80, pinned revision | emulator-derived | a generator its README calls "a semi-port from Ares" | every opcode: registers, flags, WZ, Q, R, memory, I/O, T-states, and each memory access's kind, address, value and order | anything its generator gets wrong; interrupts |
+| FUSE 1.6.0 `z80/tests` | emulator-derived | FUSE's own core | 1,356 single-instruction cases with bus events | where FUSE predates later findings (six cases, listed below) |
+| superzazu/z80 cross-check | emulator-derived | an independent C core | the interrupt lifecycle: IM 0/1/2, NMI, EI delay, HALT | its own IM 0 bug (one xfail) |
+| UM0080; Young v0.91 | documentation | Zilog's manual; Young's measurements and reading | every handler's rule, cited in its docstring; prefix runs (Young 3.7) | behaviour neither describes (WZ, Q) |
+
+**Bus-transaction order has no hardware oracle at all.** Every hardware-tier
+oracle compares state, not the sequence of accesses that produced it, so the
+order claim below rests on SingleStepTests' pin traces and FUSE's bus events,
+two emulator-derived sources that agree.
+
+## Certification record: commit `b1720b6` (2026-09-18), release 0.4.0
+
+Every gate, both interpreters, against the commit that prepared 0.4.0. The
+commits after it on the release branch change only documentation, workflows
+and the dev extra's ruff pin: `src/`, `validation/`, `tests/`, `benchmarks/`,
+`examples/` and `scripts/` are byte-identical to `b1720b6`. Linux x86_64,
+i9-13900K, each gate pinned to its own performance core, CPython 3.14.4 and
+PyPy 7.3.20 / Python 3.11.13, all gates run at once while other users held a
+load average of about 45-50 on the shared machine; the timings are therefore
+upper bounds, and "Speed" below has the load-independent comparison.
+
+| Gate | Tier | Result | CPython 3.14.4 | PyPy 7.3.20 |
+| --- | --- | --- | ---: | ---: |
+| SingleStepTests, 1,604 files, 1,604,000 cases: registers, RAM, I/O, T-states, bus transactions | emulator-derived | all passed | 252.4 s | 246.4 s |
+| Fast suite (`--deselect` both corpus files) incl. readability and the row files | -- | 4,653 passed, 2 skipped, 7 xfailed | 17.6 s | -- |
+| z80test `z80full` / `z80memptr` / `z80ccf` | hardware-captured | all tests passed | 164.3 / 85.5 / 78.0 s | 11.0 / 9.0 / 7.1 s |
+| ZEXDOC | hardware-captured | 67/67 `OK`, `Tests complete` | 5,349.8 s | 334.9 s |
+| ZEXALL | hardware-captured | 67/67 `OK`, `Tests complete` | 5,482.4 s | 421.5 s |
+| FUSE 1.6.0, 1,356 cases | emulator-derived | 1,350 passed, 6 pinned xfails | 7.1 s | -- |
+| Interrupt cross-check vs superzazu/z80 | emulator-derived | 9 passed, 1 xfail (oracle's IM 0 double-charge) | 0.3 s | -- |
+
+Commands, from the repository root with the oracles fetched:
+
+```text
+python -m pytest -q tests/test_z80.py
+python -m pytest -q --deselect tests/test_z80test_suite.py --deselect tests/test_z80.py
+python -m pytest -q tests/test_z80test_suite.py --durations=3
+python -m pytest -q tests/test_fuse_suite.py
+python -m pytest -q -rx tests/test_interrupt_crosscheck.py
+Z80_PYTHON_ZEX_DIR=tests/zex python -m pytest -q tests/test_zex_integration.py
+```
+
+The ZEX figures above come from `ZexRunner.from_file(program).run()` timed
+directly, one program per process, which is what the last command runs. The
+CPython ZEX runs took about 90 minutes each under that load, against 5,524 s
+and 5,624 s for 0.3.0 on a lightly loaded machine; `ZexRunner` checks the CP/M
+traps before every step, so it runs slower than the bare `step()` loop the
+speed ladder measures.
+GitHub's Oracles workflow ran SingleStepTests, z80test, FUSE and the
+cross-check against the same commit and passed.
 
 ## Certification record: commit `9e15acc` (2026-09-06)
 
@@ -87,7 +153,10 @@ TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases
 Two claims are separated here, because the evidence supports one and not the
 other.
 
-**Certified: which accesses happen, and in what order.** Each SingleStepTests
+**Checked against emulator-derived pin traces: which accesses happen, and in
+what order.** No hardware-captured oracle observes bus order (see
+[Oracle tiers](#oracle-tiers)); this claim is exactly as strong as
+SingleStepTests' generator, cross-checked by FUSE's bus events. Each SingleStepTests
 case's `cycles` array marks a memory read with the pin string `r-m-`, whose data
 byte latches on the following entry, and a memory write with `-wm-`, which
 carries its value inline. `VectorCPU` records every `read_byte`/`write_byte` the
@@ -134,6 +203,18 @@ Both programs reported `Tests complete` with no `ERROR ****` report. The
 post-refactor CPython combined run passed in 11,028.71 seconds; the PyPy run
 passed in 677.50 seconds.
 
+**Recertified at `695e47f` (2026-09-18)**, after the 0.4.0 speed ladder
+changed the dispatch, the flag representation and the fetch path. PyPy
+7.3.20 / Python 3.11.13, each program run alone on one pinned core of a
+shared, loaded machine, through `validation.zex.ZexRunner` driven by
+`step()`: ZEXDOC 67/67 tests `OK`, `Tests complete`, 5,764,169,474
+instructions, 278.2 s; ZEXALL 67/67 `OK`, `Tests complete`, 5,764,169,474
+instructions, 276.5 s. Same SHA-256 as above. CPython was not rerun; the
+certification policy needs one interpreter per semantic change, and the
+SingleStepTests, z80test and FUSE gates ran on CPython at every rung. The
+release commit `b1720b6` was then certified on both interpreters; see its
+record above.
+
 The 0.2.0 release candidate was recertified under PyPy 7.3.20 / Python 3.11.13
 after the RESET, state, disassembly, and debugger additions. ZEXDOC passed in
 470.43 seconds and ZEXALL passed in 426.77 seconds; the combined integration run
@@ -145,7 +226,7 @@ https://github.com/agn453/ZEXALL into an external directory, verify the hashes,
 then run:
 
 ```text
-Z80_PYTHON_ZEX_DIR=<directory> python -m pytest tests/test_zex_integration.py -m integration -q --durations=2
+Z80_PYTHON_ZEX_DIR=<directory> python -m pytest tests/test_zex_integration.py -q --durations=2
 ```
 
 On PowerShell, set `$env:Z80_PYTHON_ZEX_DIR` first. The tests use a finite
@@ -167,19 +248,20 @@ so here rather than in the code.
 
 ## Hardware-oracle validation (z80test)
 
-SingleStepTests and ZEXALL both validate against corpora ultimately derived
-from other software (SingleStepTests from a corrected Ares core; ZEXALL by
-construction checks internal CRC self-consistency, not an external
-reference). Neither is a claim against real silicon.
+SingleStepTests is emulator-derived: its generator is, in its README's words,
+"a semi-port from Ares". ZEXDOC and ZEXALL are hardware-captured but coarse:
+each compares one CRC per instruction group with "an expected value that was
+found empirically on a real Z80" (zexall.z80's header), so a failure names a
+group, not a case, and WZ, Q, R, I/O and T-states never reach the CRC.
 
-[raxoft/z80test](https://github.com/raxoft/z80test) closes that gap for the
-instructions and flags it covers: its expected values were captured by
-executing on a real 48K ZX Spectrum with a genuine Zilog Z80. The
+[raxoft/z80test](https://github.com/raxoft/z80test) is hardware-captured at a
+finer grain, for the instructions and flags it covers: its expected values
+were captured by executing on a real 48K ZX Spectrum with a genuine Zilog Z80. The
 `validation.z80test_runner` adapter replaces the two ROM touchpoints the test
 programs use for output (`RST 0x10` and `CHAN-OPEN`) with a 3-byte stub that
 has no effect on tested CPU state; no ROM image is used or required. Fetch
 the pinned, MIT-licensed release with `python scripts/fetch_z80test.py`, then
-run `python -m pytest tests/test_z80test_suite.py -m integration -q`.
+run `python -m pytest tests/test_z80test_suite.py -q`.
 
 `z80full`, `z80memptr`, and `z80ccf` all report `Result: all tests passed.`
 (`z80full` subsumes `z80doc`, `z80flags`, and `z80docflags`; `z80ccfscr` is a
@@ -243,7 +325,7 @@ scenarios spanning all three interrupt modes, NMI/HALT interaction, RETN's
 IFF1 restoration, the EI delay, DI-masking without losing a pending request,
 and NMI-vs-maskable priority. Fetch and build the pinned oracle with
 `python scripts/fetch_interrupt_oracle.py`, then run
-`python -m pytest tests/test_interrupt_crosscheck.py -m integration -q`.
+`python -m pytest tests/test_interrupt_crosscheck.py -q`.
 
 Nine of ten scenarios match exactly, including T-state totals. The tenth
 (IM 0 with a device-supplied RST) is a known bug in the oracle, not this
@@ -264,7 +346,108 @@ one genuinely unconfirmed corner this surfaced: an opt-in, off-by-default
 NMOS erratum sourced from gate-level simulation rather than a hardware
 measurement.
 
-## Performance record
+## The sources every handler cites
+
+Every opcode handler's docstring ends its headline with the source of its rule,
+and `tests/test_readability.py` fails the build without one. The vocabulary:
+
+| Citation | Source | Tier |
+| --- | --- | --- |
+| `UM0080 p. 278` | Zilog, *Z80 CPU User Manual*, UM008011-0816 (August 2016), printed page | documentation |
+| `Young 3.4` | Sean Young, *The Undocumented Z80 Documented*, v0.91 (18 September 2005), section | documentation |
+| `z80full`, `z80ccf`, `z80memptr` | raxoft z80test 1.2a programs, CRCs captured from real Zilog NMOS silicon | hardware-captured |
+| `SST c3.json` | the SingleStepTests/z80 file for that opcode, at the pinned revision | emulator-derived |
+
+Neither manual describes WZ (MEMPTR) or Q, so every handler that uses WZ,
+itself or through a helper, carries a `WZ:` line naming the SingleStepTests
+file that pins its rule, and the one handler that reads Q (`SCF`/`CCF`) a `Q:`
+line; the readability test checks both. Where z80test exercises the
+instruction, the line also names `z80memptr` (WZ, observed through a following
+`BIT n,(HL)`) or `z80ccf` (Q), the hardware-captured evidence for the same
+rule. z80test has no `RST` test, so `RST`'s WZ rule rests on SingleStepTests
+alone.
+
+The two manuals are not redistributed. `scripts/fetch_reference_docs.py`
+downloads them into the gitignored `reference/` and checks these pins:
+
+| Document | SHA-256 |
+| --- | --- |
+| `um0080.pdf` (1,587,333 bytes) | `e3c83da5a5d8e372364c20fa53665e6fbb165ec6ac38c8c1eebc359603447b5e` |
+| `z80-documented.pdf` (276,007 bytes) | `6413048f39c2e735373b1fb23102599133bc64ccd0ed63b16fbc1173643d7a9d` |
+
+Every page citation was checked against the page's own heading, and every
+cited SingleStepTests file against the pinned corpus, when the citations were
+written (2026-09-18).
+
+**Where the core departs from a cited manual.** One rule, decided by a
+higher-tier source:
+
+- **`BIT b,r` X/Y.** Young 4.1 gives Y as "set if n = 5 and tested bit is set"
+  and X likewise for n = 3, i.e. copied from the tested bit. The core copies
+  bits 5 and 3 of the register itself, whatever b is. z80test's `z80full`
+  (hardware-captured; its `BIT N,[R,(HL)]` test compares every flag) agrees
+  with the core, as does SingleStepTests; Young's text is the outlier.
+
+
+0.4.0 made the core faster one change at a time, each change a commit that
+had to pass every oracle and to measure faster, or be reverted. Six rungs were
+tried: the five the polish brief named (A-E) and one more (F) added when the
+base workload still sat just under the 2.5 M instructions/s target. The table
+gives each rung's speed as a ratio to the commit before it.
+
+**Method.** The machine (i9-13900K, shared) carried a 20-core job from other
+users throughout, and separate benchmark runs moved by +-30%, which buries a
+5-10% change. Each ratio was therefore measured with
+`benchmarks/compare_revisions.py`, which imports both revisions into one
+interpreter and times the three workloads alternately on one pinned
+performance core, best of N samples in CPU time. Interference only ever slows
+a sample, so the best sample recovers the undisturbed rate, and both sides
+see the same load. CPython 3.14.4, 30 rounds of 50,000 instructions; PyPy
+7.3.20 / Python 3.11.13, 12 rounds of 3,000,000.
+
+| Rung | Commit | CPython base | indexed_cb | block_io | PyPy base | indexed_cb | block_io |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Callable bus (decision 1, not a rung) | `764ddd8` | x1.01 | x1.07 | x1.06 | x0.68-0.86 | x1.12-1.17 | x0.83 |
+| A: one 256-entry table per opcode page | `090fa0c` | x1.32 | x2.33 | x1.15 | x1.59 | x15.1 | x1.32 |
+| B: F as one int, one expression per instruction | `88ea008` | x1.59 | x1.20 | x1.30 | x1.10 | x0.94 | x1.05 |
+| C: register file through `getattr` | reverted | x0.93 | x0.91 | x1.01 | x0.93 | x1.00 | x1.07 |
+| D: Q written in place, no `_update_q` call | `c48395c` | x1.11 | x1.02 | x1.03 | x1.05 | x1.12 | x0.95 |
+| E: 26 IX/IY ALU and LD handlers become three | `a48341b` | x1.00 | x1.01 | x1.00 | -- | -- | -- |
+| F: opcode fetch and dispatch inside `step()` | `695e47f` | x1.23 | x1.11 | x1.15 | x1.03 | x1.09 | x1.07 |
+
+The callable bus is the one change that cost PyPy speed (two runs shown as a
+range). The old hosts' `read_byte` was a class method the JIT could inline to
+an array access; a callable held in an instance attribute is loaded and
+called on every access. The contract was decided for the family's sake, not
+for speed, and the ladder repaid the cost several times over. Among callable
+hosts, a bytearray's own methods are the fast choice on PyPy: at `695e47f`
+they ran the base workload at 71 M/s against 47 M/s for Python closures over
+the same bytearray. Rung C was measured and reverted: a
+same-process micro-benchmark of the benchmark's register mix also put the
+existing if-chain first (27-33 ns per five reads against 34-38 ns). Rung E is
+a readability rung; no workload uses the forms it touched.
+
+**End to end**, pre-polish `main` against the end of the ladder, same method:
+
+```text
+python benchmarks/compare_revisions.py 651b7bf 695e47f
+```
+
+| Workload | CPython `651b7bf` | CPython `695e47f` | Change | PyPy `651b7bf` | PyPy `695e47f` | Change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 1.078 M/s | 2.729 M/s | x2.53 | 34.1 M/s | 66.6 M/s | x1.95 |
+| indexed_cb | 0.543 M/s | 1.418 M/s | x2.61 | 1.50 M/s | 33.0 M/s | x22.0 |
+| block_io | 0.934 M/s | 1.926 M/s | x2.06 | 41.9 M/s | 46.5 M/s | x1.11 |
+
+The absolute rates are best samples on a loaded machine and are lower bounds;
+the ratios are the result. The polish brief quoted a "base" baseline of
+586,045 instructions/s; that figure was the indexed_cb workload's, and the
+base workload measured 1.1 M/s before the ladder began. PyPy's 22-fold gain on
+indexed_cb comes from rung A: the old DD/FD decoder rebuilt two dictionaries
+of bound methods on every prefixed instruction, which the JIT could not
+compile away.
+
+## Performance record (0.3.0 and earlier)
 
 On Windows 11, PyPy 7.3.20 / Python 3.11.13 produced warmed median rates of
 55.55M instructions/s for the base workload, 4.11M for indexed/CB, and 56.33M

@@ -180,25 +180,18 @@ class ConformanceHost(Z80CPU):
     """
 
     def __init__(self, manifest: Manifest) -> None:
-        super().__init__()
         self.memory = bytearray(0x10000)
         self.port_read_value = manifest.port_read_value
         self.output = bytearray()
         for segment in manifest.memory:
             self.memory[segment.address : segment.address + len(segment.data)] = segment.data
+        super().__init__(
+            self.memory.__getitem__, self.memory.__setitem__, read_port=self._read_port
+        )
         self.restore_state(manifest.initial)
 
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
+    def _read_port(self, port: int) -> int:
         return self.port_read_value
-
-    def write_port(self, addr: int, value: int) -> None:
-        pass
 
     def peek_byte(self, addr: int) -> int:
         """Side-effect-free read for disassembly (identical to read_byte here)."""

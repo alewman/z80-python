@@ -6,18 +6,26 @@ the code usable as a reference: every opcode handler must be findable by the
 mnemonic a Z80 programmer would grep for, and must live in the module that
 owns that instruction group.
 
-Three invariants, all derived from the source with :mod:`ast` (no import-time
+Five invariants, all derived from the source with :mod:`ast` (no import-time
 side effects, no execution):
 
-1. Every ``_op_*`` method has a docstring whose first line starts with one or
-   more official Zilog mnemonics (``DJNZ e``, ``BIT b,(HL)``, ``SCF/CCF``),
-   optionally followed by operands and a ``--`` explanation.
+1. Every ``_op_*`` method has a docstring whose headline (its first paragraph)
+   starts with one or more official Zilog mnemonics (``DJNZ e``,
+   ``BIT b,(HL)``, ``SCF/CCF``), optionally followed by operands and a ``--``
+   explanation, and ends with the source of its rule in parentheses: a page of
+   Zilog's *Z80 CPU User Manual* UM008011-0816 (``UM0080 p. 278``) or a
+   section of Sean Young's *The Undocumented Z80 Documented* v0.91
+   (``Young 3.4``), or both. docs/validation.md pins both documents.
 2. Every handler lives in the module that owns its mnemonic group.  The index
    module is the one exception to mnemonic ownership: it may implement any
    mnemonic, but only in an IX/IY form, so ``DJNZ`` cannot hide there again.
 3. Every Zilog mnemonic is claimed by at least one handler, and no handler
    name is defined twice across the mixins (a duplicate would be silently
    shadowed by the MRO and never executed).
+4. Neither manual describes WZ (MEMPTR) or Q, so every handler that reads or
+   writes WZ, itself or through a helper it calls, names the SingleStepTests
+   file that pins its rule on a ``WZ`` line (``WZ: z80memptr; SST c3.json.``),
+   and every handler that reads Q does the same on a ``Q:`` line.
 """
 
 from __future__ import annotations
@@ -58,8 +66,16 @@ OWNERS: dict[str, frozenset[str]] = {
 INDEX_MODULE = "_index.py"
 INDEX_OPERAND = re.compile(r"\bI[XY]")
 
-#: First-line grammar: ``MNEMONIC[/MNEMONIC...] [operands] [-- explanation]``.
+#: Headline grammar: ``MNEMONIC[/MNEMONIC...] [operands] [-- explanation]``.
 _HEADLINE = re.compile(r"^(?P<mnemonics>[A-Z]+(?:/[A-Z]+)*)(?P<rest>(?:\s.*)?)$")
+
+#: One source: ``UM0080 p. 278``, ``UM0080 pp. 71, 74, 79``, ``UM0080 pp. 262-263``,
+#: ``Young 3.4`` or ``Young 4.2, 4.5``.
+_SOURCE = r"(?:UM0080 pp?\. \d+(?:(?:-|, )\d+)*|Young \d+\.\d+(?:, \d+\.\d+)*)"
+#: The headline's closing citation: one or more sources, ``;``-separated.
+_CITATION = re.compile(rf"\((?P<sources>{_SOURCE}(?:; {_SOURCE})*)\)\.?$")
+#: The evidence line for a WZ or Q rule: the SingleStepTests file(s) that pin it.
+_SST_FILE = re.compile(r"SST (?:[0-9a-f]{2} )*(?:__ )?[0-9a-f]{2}\.json")
 
 
 class Handler:
@@ -77,11 +93,12 @@ class Handler:
 
     @property
     def headline(self) -> str:
-        return (self.docstring or "").splitlines()[0] if self.docstring else ""
+        """The docstring's first paragraph, as one line."""
+        return " ".join((self.docstring or "").split("\n\n", 1)[0].split())
 
     def parse(self) -> tuple[list[str], str]:
         """Return ``(mnemonics, operand_text)`` from the docstring headline."""
-        form = self.headline.split(" -- ", 1)[0].strip()
+        form = _CITATION.sub("", self.headline).split(" -- ", 1)[0].strip()
         match = _HEADLINE.match(form)
         if match is None:
             raise AssertionError(
@@ -105,7 +122,47 @@ def _handlers() -> list[Handler]:
     return found
 
 
+def _methods() -> dict[str, ast.FunctionDef]:
+    """Every method of every mixin, by name (the MRO makes names unique)."""
+    methods: dict[str, ast.FunctionDef] = {}
+    for path in sorted(SRC.glob("_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+            for node in cls.body:
+                if isinstance(node, ast.FunctionDef):
+                    methods[node.name] = node
+    return methods
+
+
+def _touches(attribute: str, *, reads_only: bool = False) -> set[str]:
+    """Methods that use ``self.<attribute>``, directly or through ``self.<method>()`` calls."""
+    methods = _methods()
+    direct: set[str] = set()
+    calls: dict[str, set[str]] = {}
+    for name, node in methods.items():
+        calls[name] = set()
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Attribute) and isinstance(inner.value, ast.Name):
+                if inner.value.id != "self":
+                    continue
+                if inner.attr == attribute and (not reads_only or isinstance(inner.ctx, ast.Load)):
+                    direct.add(name)
+                elif inner.attr in methods:
+                    calls[name].add(inner.attr)
+    touching = set(direct)
+    changed = True
+    while changed:
+        changed = False
+        for name, callees in calls.items():
+            if name not in touching and callees & touching:
+                touching.add(name)
+                changed = True
+    return touching
+
+
 HANDLERS = _handlers()
+USES_WZ = _touches("wz")
+READS_Q = _touches("q", reads_only=True)
 
 
 @pytest.mark.parametrize("handler", HANDLERS, ids=lambda h: f"{h.module}::{h.name}")
@@ -114,6 +171,36 @@ def test_handler_docstring_starts_with_zilog_mnemonic(handler: Handler) -> None:
     mnemonics, _ = handler.parse()
     unknown = [m for m in mnemonics if m not in ZILOG_MNEMONICS]
     assert not unknown, f"{handler.location}: not Zilog mnemonics: {unknown}"
+
+
+@pytest.mark.parametrize("handler", HANDLERS, ids=lambda h: f"{h.module}::{h.name}")
+def test_handler_headline_cites_its_source(handler: Handler) -> None:
+    assert _CITATION.search(handler.headline), (
+        f"{handler.location}: headline must end with its source in parentheses, "
+        f"e.g. (UM0080 p. 278) or (Young 3.4); got {handler.headline!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "handler", [h for h in HANDLERS if h.name in USES_WZ], ids=lambda h: f"{h.module}::{h.name}"
+)
+def test_handler_using_wz_names_the_file_that_pins_it(handler: Handler) -> None:
+    lines = [line for line in (handler.docstring or "").splitlines() if "WZ" in line]
+    assert any(_SST_FILE.search(line) for line in lines), (
+        f"{handler.location}: uses WZ, which neither manual documents; add a line "
+        "'WZ: ... SST <file>.json' naming the SingleStepTests file that pins the rule"
+    )
+
+
+@pytest.mark.parametrize(
+    "handler", [h for h in HANDLERS if h.name in READS_Q], ids=lambda h: f"{h.module}::{h.name}"
+)
+def test_handler_reading_q_names_the_file_that_pins_it(handler: Handler) -> None:
+    lines = [line for line in (handler.docstring or "").splitlines() if line.startswith("Q:")]
+    assert any(_SST_FILE.search(line) for line in lines), (
+        f"{handler.location}: reads Q, which neither manual documents; add a line "
+        "'Q: ... SST <file>.json' naming the SingleStepTests file that pins the rule"
+    )
 
 
 @pytest.mark.parametrize("handler", HANDLERS, ids=lambda h: f"{h.module}::{h.name}")

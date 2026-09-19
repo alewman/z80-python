@@ -4,8 +4,8 @@ from dataclasses import fields, replace
 from io import StringIO
 
 import pytest
+from conftest import MemoryCPU
 
-from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import (
     TRACE_SCHEMA_VERSION,
     BoundaryKind,
@@ -26,7 +26,7 @@ from z80_python import (
 
 
 def _history(program: bytes, *, a: int = 0) -> tuple[StepRecord, ...]:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     cpu.memory[: len(program)] = program
     cpu.a = a
     session = DebugSession(cpu, peek_byte=cpu.memory.__getitem__)
@@ -130,8 +130,8 @@ def test_first_divergence_stops_consuming_after_the_unequal_pair() -> None:
 
 
 def test_live_sessions_stop_at_first_divergence_and_retain_prior_context() -> None:
-    left_cpu = MinimalZ80Host()
-    right_cpu = MinimalZ80Host()
+    left_cpu = MemoryCPU()
+    right_cpu = MemoryCPU()
     left_cpu.memory[:3] = bytes((0x00, 0x3C, 0x00))
     right_cpu.memory[:3] = bytes((0x00, 0x3D, 0x00))
     left = DebugSession(left_cpu, peek_byte=left_cpu.memory.__getitem__, history_limit=4)
@@ -148,7 +148,7 @@ def test_live_sessions_stop_at_first_divergence_and_retain_prior_context() -> No
 
 
 def test_live_session_iteration_requires_a_finite_positive_budget() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     session = DebugSession(cpu)
 
     assert len(tuple(iter_session_steps(session, max_steps=2))) == 2

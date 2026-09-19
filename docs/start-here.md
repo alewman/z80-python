@@ -11,7 +11,7 @@ behavior. Nothing here is a substitute for the code; the code is the reference.
 
 | Name | Width | In this core | Notes |
 | --- | --- | --- | --- |
-| A, F | 8 | `cpu.a`, `cpu.f` (a `Flags` object; `cpu.f.byte` is the raw value) | Accumulator and flags; together the pair AF |
+| A, F | 8 | `cpu.a`, `cpu.f` (a `Flags` view: `cpu.f.byte`, `cpu.f.c`, `int(cpu.f)`) | Accumulator and flags; together the pair AF |
 | B, C, D, E, H, L | 8 | `cpu.b` ... `cpu.l` | General registers; pairs BC, DE, HL |
 | AF', BC', DE', HL' | 16 | `cpu.af_`, `cpu.bc_`, `cpu.de_`, `cpu.hl_` | Alternate set. `EX AF,AF'` swaps AF; `EXX` swaps the other three |
 | IX, IY | 16 | `cpu.ix`, `cpu.iy` | Index registers. Their halves IXH/IXL/IYH/IYL are usable as 8-bit registers (undocumented but universal) |
@@ -45,8 +45,12 @@ flag:  S   Z   Y   H   X   P/V  N   C
   3 and 5 of their result into them. The exceptions are the whole subject of
   [undocumented-behavior](undocumented-behavior.md).
 
-`_flags.py` is the whole implementation: one byte with named accessors and
-`set_xy(value)`, which copies bits 3 and 5 of `value`.
+Inside the core F is one int, `cpu._f`, and each instruction computes the
+whole new F in a single expression from the masks and tables in `_flags.py`
+(`SZXY[r]` is S, Z, Y and X as a result byte `r` sets them; `SZXYP[r]` adds
+parity). `cpu.f` is the public face: a `Flags` view whose named bits
+(`cpu.f.z`, `cpu.f.c = 1`) read and write that same int. `Flags(value)` on
+its own is a standalone byte with the same accessors.
 
 ## How an opcode byte is decoded
 
@@ -97,9 +101,14 @@ instruction that writes no flags (so Q reads as 0 afterwards).
 | DD CB / FD CB | Indexed rotates and bit ops | Byte order is `DD CB d op`; the displacement comes before the final opcode. R advances by 2, not 4, because the last byte is read as an operand. The undocumented forms with z != 6 also copy the result into `r[z]` |
 | DD DD, DD FD, DD ED and the FD forms | Prefix runs | A DD or FD is a flag for the next opcode, not an instruction, so a run of them is legal: each stray one costs 4 T-states and increments R, the last one decides IX or IY, and an ED after any of them starts an ED instruction the flag cannot touch. The run and its opcode are one instruction boundary; no interrupt is accepted inside it |
 
-`_dispatch.py` and `_index_dispatch.py` are those tables written as if-chains.
-The explicit shape is deliberate: it is what PyPy compiles well, and every
-opcode is one grep away.
+`_dispatch.py` and `_index_dispatch.py` are those tables written as data:
+rules such as `(range(0x80, 0xC0), "_op_alu_r", OPCODE)`, built once per class
+into one 256-entry table per page, so executing an instruction is one list
+index and one call. Every entry names its `_op_*` handler, so every opcode is
+still one grep away, and every handler's docstring ends with the page of
+Zilog's manual (or the section of Young's) its rule comes from;
+[validation](validation.md#the-sources-every-handler-cites) lists the
+citation forms and pins both documents.
 
 ## T-states
 
@@ -132,6 +141,52 @@ none for operand bytes.
 The comments on the lines that implement each of these say why the hardware
 does it. [undocumented-behavior](undocumented-behavior.md) collects the rules
 in one place.
+
+## The embedding contract
+
+The host owns memory and every device; the CPU owns its registers and nothing
+else. m6800-python takes its bus the same way, so a host for one family core
+reads like a host for another.
+
+```python
+from z80_python import Z80CPU
+
+cpu = Z80CPU(bus.read, bus.write, read_port=io.read, write_port=io.write)
+while True:
+    t_states = cpu.step()  # one instruction, or one lifecycle boundary
+    devices.tick(t_states)  # the host advances timers, video, sound
+    if devices.irq:
+        cpu.request_maskable_interrupt(devices.vector)
+```
+
+- `read_byte(address) -> int` and `write_byte(address, value)` are the memory
+  bus; both are required. `read_port(port) -> int` and `write_port(port,
+  value)` are the I/O bus, where `port` is the full 16-bit address the Z80
+  drives (A or B on the high byte; see `IN A,(n)` and `IN r,(C)`). Leave them
+  out and the I/O bus is unconnected: reads return 0xFF, writes go nowhere.
+- The core always passes a 16-bit address and an 8-bit value, so a host never
+  masks: `Z80CPU(memory.__getitem__, memory.__setitem__)` is a complete flat
+  host. The SingleStepTests host (`validation/vector_utils.py`) fails any case
+  that breaks this, so all 1,604,000 cases certify it.
+- The four callables are plain attributes of the CPU and may be replaced at
+  any time.
+- Under PyPy, pass a bytearray's own `__getitem__`/`__setitem__` where you
+  can: they ran the base workload at 71 M instructions/s against 47 M for
+  Python closures over the same bytearray (docs/validation.md, "Speed").
+- `step()` returns the instruction's (or interrupt's) T-states; the host keeps
+  the clock. Registers are plain attributes the host may read and set.
+- RESET, NMI and maskable interrupts are requested by method, between steps:
+  see [interrupt-lifecycle](interrupt-lifecycle.md).
+- Until 0.4.0 a host subclassed `Z80CPU` and defined `read_byte` and the rest
+  as methods. Such a class is now refused when it is defined, with a
+  `TypeError` naming the form above. Subclassing to add host state is still
+  fine; `tests/conftest.py`'s `MemoryCPU` does it.
+- A host that passes its *own* bound methods (`self.read`) makes the CPU a
+  reference cycle, freed only by the cyclic collector. That is harmless for
+  one long-lived machine; a runner that builds a CPU per test case should
+  pass closures or another object's methods instead, as
+  `validation/vector_utils.py` does (constructing 1.6 million CPUs went from
+  2 µs each to 21 µs when it did not).
 
 ## Interrupts
 

@@ -61,7 +61,7 @@ scope, finish the item and record the gap in `CHANGELOG.md` under
   `src/z80_python/`. The whole core is 4,884 lines; read it all before
   changing any of it.
 
-## Two decisions Aubrey has made (2026-09-18)
+## Two decisions Aubrey has made (2026-09-18; the second amended the same day)
 
 Both are deliberate breaks. Nobody outside this family uses the package yet,
 so 0.4.0 takes them now rather than carrying compatibility shims into six
@@ -86,12 +86,15 @@ says so.
    with one), and the README, `start-here.md`, `interrupt-lifecycle.md`,
    `conformance.md` and `api-stability.md` prose. m6800-python's README
    claim of "the same embedding contract" becomes true; say so in both.
-2. **The Python floor is 3.12.** `requires-python = ">=3.12"`, ruff
-   `target-version = "py312"`, classifiers 3.12/3.13/3.14, CI matrix
-   `3.12`, `3.13`, `3.14`, `pypy-3.11`. Drop 3.11 everywhere it is named
-   (README install section, CI, classifiers). Use 3.12 syntax where it
-   reads better (`type` aliases, PEP 695 generics) but do not churn code
-   for its own sake.
+2. **CPython 3.11 leaves the tested matrix; PyPy sets the floor.**
+   *Amended 2026-09-18 (Aubrey: "We need to support PyPy").* As first
+   written this item asked for `requires-python = ">=3.12"` and 3.12
+   syntax, but no PyPy supports 3.12 yet (the newest, 7.3.23, is Python
+   3.11.15), so that floor would make pip refuse PyPy and the syntax
+   would not run on it. Instead: `requires-python` stays `>=3.11` with a
+   comment naming PyPy as the reason, ruff stays `py311`, no syntax newer
+   than 3.11, classifiers 3.12/3.13/3.14 plus PyPy, CI matrix `3.12`,
+   `3.13`, `3.14`, `pypy3.11`. Raise the floor when PyPy supports 3.12.
 
 ## Constraints
 

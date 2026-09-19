@@ -15,12 +15,14 @@ from z80_python.cpu import (
     Flags,
 )
 from z80_python.debug import (
+    Access,
     BoundaryKind,
     DebugSession,
     DebugTarget,
     RunResult,
     StepRecord,
     StopReason,
+    next_boundary,
 )
 from z80_python.disasm import ByteReader, Instruction, disassemble, disassemble_bytes
 from z80_python.trace import (
@@ -50,6 +52,7 @@ __all__ = [
     "FLAG_Z",
     "TRACE_SCHEMA_VERSION",
     "Z80CPU",
+    "Access",
     "BoundaryKind",
     "ByteReader",
     "CPUState",
@@ -73,6 +76,7 @@ __all__ = [
     "first_trace_divergence",
     "iter_session_steps",
     "iter_trace_divergences",
+    "next_boundary",
     "read_trace",
     "step_record_from_dict",
     "step_record_to_dict",

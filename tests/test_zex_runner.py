@@ -38,4 +38,4 @@ def test_runner_rejects_non_terminating_programs() -> None:
     program = bytes((0xC3, 0, 1))
 
     with pytest.raises(ZexRunError, match="within 5 instructions"):
-        ZexRunner(program).run(max_instructions=5)  # noqa: W292
+        ZexRunner(program).run(max_instructions=5)

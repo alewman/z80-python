@@ -46,8 +46,16 @@ def main() -> None:
 
     subprocess.run(
         [
-            cc, "-O2", "-fPIC", "-shared", "-I", str(SRC_DIR),
-            "-o", str(LIBRARY), str(SRC_DIR / "z80.c"), str(WRAPPER),
+            cc,
+            "-O2",
+            "-fPIC",
+            "-shared",
+            "-I",
+            str(SRC_DIR),
+            "-o",
+            str(LIBRARY),
+            str(SRC_DIR / "z80.c"),
+            str(WRAPPER),
         ],
         check=True,
     )

@@ -1,444 +1,359 @@
-"""Unit tests for the Z80 8-bit arithmetic and logic group (src/z80_python/).
+"""Arithmetic and logic: one instruction per row, checked in full.
 
-The authoritative check for this group is the per-opcode SingleStepTests/z80
-vector suite run by ``tests/test_z80.py`` (89 vector files, 1000 cases each,
-covering ADD/ADC/SUB/SBC/AND/OR/XOR/CP with register, (HL) and immediate
-operands, INC/DEC r, INC/DEC (HL) and DAA).  The tests here are a fast,
-readable complement that pins down the documented flag semantics -- S, Z, H,
-P/V, N, C plus the undocumented X/Y bits -- the WZ and Q behaviour, the T-state
-counts and the register-field decode, so a regression is visible in a single
-test name instead of a 1000-case vector diff.
+The rows cover 8- and 16-bit arithmetic and logic, INC/DEC, DAA, CPL, NEG,
+SCF/CCF. Each row is ``Row(program, t_states, initial, changes)``, run by
+``conftest.check_step``: the CPU starts from ``initial`` with ``program`` at PC
+and executes one ``step()``, and afterwards every register, every byte of
+memory, every port write and the T-states must be exactly as the row says. What
+``changes`` lists changed to that value; everything else is unchanged.
+``conftest.Row`` explains the notation.
+
+The handlers are in ``src/z80_python/_alu.py``. The rows were recorded from the
+hand-written per-opcode tests this file replaced (0.4.0, polish item 3), each
+of which they reproduce exactly; the SingleStepTests corpus
+(``tests/test_z80.py``) covers the same opcodes exhaustively.
 """
 
-from __future__ import annotations
-
 import pytest
+from conftest import Row, check_step
 
-from z80_python import Z80CPU
-
-FLAG_S = 0x80
-FLAG_Z = 0x40
-FLAG_Y = 0x20
-FLAG_H = 0x10
-FLAG_X = 0x08
-FLAG_PV = 0x04
-FLAG_N = 0x02
-FLAG_C = 0x01
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by a flat 64 KiB bytearray."""
-
-    def __init__(self, memory: bytes = bytes(0x10000)) -> None:
-        super().__init__()
-        self.memory = bytearray(memory)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        raise NotImplementedError("test MemoryCPU does not model I/O ports")
-
-    def write_port(self, addr: int, value: int) -> None:
-        raise NotImplementedError("test MemoryCPU does not model I/O ports")
-
-
-def _program(cpu: MemoryCPU, pc: int, *bytes_: int) -> None:
-    """Write a little program at ``pc`` and point the CPU at it."""
-    for offset, value in enumerate(bytes_):
-        cpu.write_byte(pc + offset, value)
-    cpu.pc = pc
-
-
-# --- ADD / ADC -------------------------------------------------------------
-
-
-def test_add_register_sets_basic_flags() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x10
-    cpu.b = 0x20
-    _program(cpu, 0x0000, 0x80)  # ADD A,B
-    assert cpu.decode_and_execute() == 4
-    assert cpu.a == 0x30
-    assert cpu.f.byte & (FLAG_S | FLAG_Z | FLAG_H | FLAG_PV | FLAG_N | FLAG_C) == 0
-    # X/Y copy result bits 3/5 (0x30 -> bit5 set, bit3 clear).
-    assert cpu.f.y == 1
-    assert cpu.f.x == 0
-
-
-def test_add_half_carry() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x0F
-    cpu.b = 0x01
-    _program(cpu, 0x0000, 0x80)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x10
-    assert cpu.f.h == 1
-    assert cpu.f.c == 0
-
-
-def test_add_carry_and_zero() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0xFF
-    cpu.b = 0x01
-    _program(cpu, 0x0000, 0x80)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x00
-    assert cpu.f.c == 1
-    assert cpu.f.z == 1
-    assert cpu.f.h == 1
-    assert cpu.f.s == 0
-
-
-def test_add_overflow() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x7F
-    cpu.b = 0x01
-    _program(cpu, 0x0000, 0x80)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x80
-    assert cpu.f.pv == 1  # +127 + 1 overflows into the sign bit
-    assert cpu.f.s == 1
-    assert cpu.f.z == 0
-    assert cpu.f.c == 0
-
-
-def test_adc_includes_carry() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x00
-    cpu.b = 0x00
-    cpu.f.c = 1
-    _program(cpu, 0x0000, 0x88)  # ADC A,B
-    cpu.decode_and_execute()
-    assert cpu.a == 0x01
-    assert cpu.f.c == 0
-    assert cpu.f.z == 0
-
-
-def test_add_immediate_advances_pc() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x22
-    _program(cpu, 0x1000, 0xC6, 0x11)  # ADD A,0x11
-    assert cpu.decode_and_execute() == 7
-    assert cpu.a == 0x33
-    assert cpu.pc == 0x1002
-
-
-def test_add_hl_operand_reads_memory() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x03
-    cpu.h = 0x20
-    cpu.l = 0x00
-    cpu.write_byte(0x2000, 0x05)
-    cpu.wz = 0x1234
-    _program(cpu, 0x0000, 0x86)  # ADD A,(HL)
-    assert cpu.decode_and_execute() == 7
-    assert cpu.a == 0x08
-    # 8-bit ALU operations leave WZ untouched.
-    assert cpu.wz == 0x1234
-
-
-def test_alu_register_field_decode() -> None:
-    """0x80-0x85/0x87 select B/C/D/E/H/L/A as the ADD source."""
-    for opcode, reg in (
-        (0x80, "b"),
-        (0x81, "c"),
-        (0x82, "d"),
-        (0x83, "e"),
-        (0x84, "h"),
-        (0x85, "l"),
-        (0x87, "a"),
-    ):
-        cpu = MemoryCPU()
-        cpu.a = 0x10
-        operand = cpu.a if reg == "a" else 0x07
-        setattr(cpu, reg, operand)
-        _program(cpu, 0x0000, opcode)
-        cpu.decode_and_execute()
-        assert cpu.a == 0x10 + operand, f"ADD A,{reg.upper()} via 0x{opcode:02X}"
-
-
-# --- SUB / SBC -------------------------------------------------------------
-
-
-def test_sub_borrow_and_half_carry() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x00
-    cpu.b = 0x01
-    _program(cpu, 0x0000, 0x90)  # SUB B
-    cpu.decode_and_execute()
-    assert cpu.a == 0xFF
-    assert cpu.f.c == 1
-    assert cpu.f.n == 1
-    assert cpu.f.h == 1
-    assert cpu.f.s == 1
-    assert cpu.f.z == 0
-    assert cpu.f.x == 1
-    assert cpu.f.y == 1
-
-
-def test_sub_overflow() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x80
-    cpu.b = 0x01
-    _program(cpu, 0x0000, 0x90)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x7F
-    assert cpu.f.pv == 1  # -128 - 1 underflows past the sign bit
-    assert cpu.f.s == 0
-    assert cpu.f.c == 0
-
-
-def test_sbc_includes_carry() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x10
-    cpu.b = 0x01
-    cpu.f.c = 1
-    _program(cpu, 0x0000, 0x98)  # SBC A,B
-    cpu.decode_and_execute()
-    assert cpu.a == 0x0E
-    assert cpu.f.c == 0
-    assert cpu.f.n == 1
-
-
-# --- AND / OR / XOR --------------------------------------------------------
-
-
-def test_and_sets_half_carry_and_parity() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0xFF
-    cpu.b = 0x0F
-    _program(cpu, 0x0000, 0xA0)  # AND B
-    cpu.decode_and_execute()
-    assert cpu.a == 0x0F
-    assert cpu.f.h == 1
-    assert cpu.f.c == 0
-    assert cpu.f.n == 0
-    assert cpu.f.pv == 1  # 0x0F has four set bits -> even parity
-    assert cpu.f.x == 1  # bit 3 of 0x0F
-    assert cpu.f.y == 0
-
-
-def test_and_zero_result() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0xF0
-    cpu.b = 0x0F
-    _program(cpu, 0x0000, 0xA0)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x00
-    assert cpu.f.z == 1
-    assert cpu.f.pv == 1  # zero set bits -> even parity
-
-
-def test_or_clears_h_and_c() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x80
-    cpu.b = 0x01
-    _program(cpu, 0x0000, 0xB0)  # OR B
-    cpu.decode_and_execute()
-    assert cpu.a == 0x81
-    assert cpu.f.h == 0
-    assert cpu.f.c == 0
-    assert cpu.f.n == 0
-    assert cpu.f.pv == 1  # 0x81 has two set bits -> even parity
-    assert cpu.f.s == 1
-
-
-def test_xor_clears_h_and_c() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0xFF
-    cpu.b = 0x0F
-    _program(cpu, 0x0000, 0xA8)  # XOR B
-    cpu.decode_and_execute()
-    assert cpu.a == 0xF0
-    assert cpu.f.h == 0
-    assert cpu.f.c == 0
-    assert cpu.f.n == 0
-    assert cpu.f.pv == 1  # 0xF0 has four set bits -> even parity
-    assert cpu.f.s == 1
-    assert cpu.f.y == 1  # bit 5 of 0xF0
-
-
-# --- CP --------------------------------------------------------------------
-
-
-def test_cp_leaves_a_and_copies_xy_from_operand() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x00
-    cpu.b = 0x28
-    _program(cpu, 0x0000, 0xB8)  # CP B
-    cpu.decode_and_execute()
-    assert cpu.a == 0x00  # accumulator untouched
-    assert cpu.f.c == 1
-    assert cpu.f.n == 1
-    assert cpu.f.s == 1
-    assert cpu.f.z == 0
-    # CP copies X/Y from the operand (0x28 -> bits 5 and 3 both set).
-    assert cpu.f.y == 1
-    assert cpu.f.x == 1
-
-
-def test_cp_equal_sets_zero() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x42
-    cpu.b = 0x42
-    _program(cpu, 0x0000, 0xB8)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x42
-    assert cpu.f.z == 1
-    assert cpu.f.c == 0
-
-
-# --- INC / DEC -------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("inc_opcode", "dec_opcode", "reg"),
-    [
-        (0x04, 0x05, "b"),
-        (0x0C, 0x0D, "c"),
-        (0x14, 0x15, "d"),
-        (0x1C, 0x1D, "e"),
-        (0x24, 0x25, "h"),
-        (0x2C, 0x2D, "l"),
-        (0x3C, 0x3D, "a"),
-    ],
+# The rows are a table; the formatter would put every field on its own line.
+# fmt: off
+ROWS = (
+    Row("03", 6,
+        "pc=0000 b=10",
+        "c=01 pc=0001 r=01"),
+    Row("03", 6,
+        "pc=0000 f=AB b=FF c=FF",
+        "b=00 c=00 pc=0001 r=01"),
+    Row("04", 4,
+        "pc=0000 b=05",
+        "b=06 pc=0001 r=01"),
+    Row("04", 4,
+        "pc=0000 b=FF",
+        "f=50 b=00 pc=0001 r=01 q=50"),
+    Row("04", 4,
+        "pc=0000 f=01 b=7F",
+        "f=95 b=80 pc=0001 r=01 q=95"),
+    Row("05", 4,
+        "pc=0000 b=06 r=01",
+        "f=02 b=05 pc=0001 r=02 q=02"),
+    Row("05", 4,
+        "pc=0000 f=01 b=80",
+        "f=3F b=7F pc=0001 r=01 q=3F"),
+    Row("09", 11,
+        "pc=0000 b=20 h=10",
+        "f=20 h=30 pc=0001 wz=1001 r=01 q=20"),
+    Row("09", 11,
+        "pc=0000 c=01 h=12 l=34 wz=FFFF",
+        "l=35 pc=0001 wz=1235 r=01"),
+    Row("09", 11,
+        "pc=0000 c=01 h=FF l=FF",
+        "f=11 h=00 l=00 pc=0001 r=01 q=11"),
+    Row("09", 11,
+        "pc=0000 c=01 l=01",
+        "l=02 pc=0001 wz=0002 r=01"),
+    Row("09", 11,
+        "pc=0000 f=AB b=01 h=01",
+        "f=80 h=02 pc=0001 wz=0101 r=01 q=80"),
+    Row("0B", 6,
+        "pc=0000 b=10 c=01 r=01",
+        "c=00 pc=0001 r=02"),
+    Row("0B", 6,
+        "pc=0000 f=AB",
+        "b=FF c=FF pc=0001 r=01"),
+    Row("0C", 4,
+        "pc=0000 c=05",
+        "c=06 pc=0001 r=01"),
+    Row("0D", 4,
+        "pc=0000 c=06 r=01",
+        "f=02 c=05 pc=0001 r=02 q=02"),
+    Row("13", 6,
+        "pc=0000 d=10",
+        "e=01 pc=0001 r=01"),
+    Row("14", 4,
+        "pc=0000 d=05",
+        "d=06 pc=0001 r=01"),
+    Row("15", 4,
+        "pc=0000 d=06 r=01",
+        "f=02 d=05 pc=0001 r=02 q=02"),
+    Row("19", 11,
+        "pc=0000 d=20 h=10",
+        "f=20 h=30 pc=0001 wz=1001 r=01 q=20"),
+    Row("1B", 6,
+        "pc=0000 d=10 e=01 r=01",
+        "e=00 pc=0001 r=02"),
+    Row("1C", 4,
+        "pc=0000 e=05",
+        "e=06 pc=0001 r=01"),
+    Row("1D", 4,
+        "pc=0000 e=06 r=01",
+        "f=02 e=05 pc=0001 r=02 q=02"),
+    Row("23", 6,
+        "pc=0000 h=10",
+        "l=01 pc=0001 r=01"),
+    Row("24", 4,
+        "pc=0000 h=05",
+        "h=06 pc=0001 r=01"),
+    Row("25", 4,
+        "pc=0000 h=06 r=01",
+        "f=02 h=05 pc=0001 r=02 q=02"),
+    Row("27", 4,
+        "pc=0000 a=12 f=10",
+        "a=18 f=0C pc=0001 r=01 q=0C"),
+    Row("27", 4,
+        "pc=0000 a=15",
+        "pc=0001 r=01"),
+    Row("27", 4,
+        "pc=0000 a=9A f=10",
+        "a=00 f=55 pc=0001 r=01 q=55"),
+    Row("29", 11,
+        "pc=0000 h=10 sp=1000",
+        "f=20 h=20 pc=0001 wz=1001 r=01 q=20"),
+    Row("2B", 6,
+        "pc=0000 h=10 l=01 r=01",
+        "l=00 pc=0001 r=02"),
+    Row("2C", 4,
+        "pc=0000 l=05",
+        "l=06 pc=0001 r=01"),
+    Row("2D", 4,
+        "pc=0000 l=06 r=01",
+        "f=02 l=05 pc=0001 r=02 q=02"),
+    Row("2F", 4,
+        "pc=2000 a=5A f=C5 wz=BEEF r=3E q=C5",
+        "a=A5 f=F7 pc=2001 r=3F q=F7"),
+    Row("33", 6,
+        "pc=0000 sp=1000",
+        "sp=1001 pc=0001 r=01"),
+    Row("34", 11,
+        "pc=0000 f=01 h=40 (4000)=FF",
+        "f=51 pc=0001 r=01 q=51 (4000)=00"),
+    Row("35", 11,
+        "pc=0000 f=01 h=40",
+        "f=BB pc=0001 r=01 q=BB (4000)=FF"),
+    Row("37", 4,
+        "pc=2000 f=ED wz=BEEF r=3E q=ED",
+        "f=C5 pc=2001 r=3F q=C5"),
+    Row("37", 4,
+        "pc=2000 f=ED wz=BEEF r=3E",
+        "pc=2001 r=3F q=ED"),
+    Row("39", 11,
+        "pc=0000 h=10 sp=2000",
+        "f=20 h=30 pc=0001 wz=1001 r=01 q=20"),
+    Row("3B", 6,
+        "pc=0000 sp=1001 r=01",
+        "sp=1000 pc=0001 r=02"),
+    Row("3C", 4,
+        "pc=0000 a=05",
+        "a=06 pc=0001 r=01"),
+    Row("3D", 4,
+        "pc=0000 a=06 r=01",
+        "a=05 f=02 pc=0001 r=02 q=02"),
+    Row("3F", 4,
+        "pc=2000 f=ED wz=BEEF r=3E q=ED",
+        "f=D4 pc=2001 r=3F q=D4"),
+    Row("3F", 4,
+        "pc=2000 f=ED wz=BEEF r=3E",
+        "f=FC pc=2001 r=3F q=FC"),
+    Row("80", 4,
+        "pc=0000 a=0F b=01",
+        "a=10 f=10 pc=0001 r=01 q=10"),
+    Row("80", 4,
+        "pc=0000 a=10 b=07",
+        "a=17 pc=0001 r=01"),
+    Row("80", 4,
+        "pc=0000 a=10 b=20 wz=ABCD",
+        "a=30 f=20 pc=0001 r=01 q=20"),
+    Row("80", 4,
+        "pc=0000 a=10 b=20",
+        "a=30 f=20 pc=0001 r=01 q=20"),
+    Row("80", 4,
+        "pc=0000 a=7F b=01",
+        "a=80 f=94 pc=0001 r=01 q=94"),
+    Row("80", 4,
+        "pc=0000 a=FF b=01",
+        "a=00 f=51 pc=0001 r=01 q=51"),
+    Row("81", 4,
+        "pc=0000 a=10 c=07",
+        "a=17 pc=0001 r=01"),
+    Row("82", 4,
+        "pc=0000 a=10 d=07",
+        "a=17 pc=0001 r=01"),
+    Row("83", 4,
+        "pc=0000 a=10 e=07",
+        "a=17 pc=0001 r=01"),
+    Row("84", 4,
+        "pc=0000 a=10 h=07",
+        "a=17 pc=0001 r=01"),
+    Row("85", 4,
+        "pc=0000 a=10 l=07",
+        "a=17 pc=0001 r=01"),
+    Row("86", 7,
+        "pc=0000 a=03 h=20 wz=1234 (2000)=05",
+        "a=08 f=08 pc=0001 r=01 q=08"),
+    Row("87", 4,
+        "pc=0000 a=10",
+        "a=20 f=20 pc=0001 r=01 q=20"),
+    Row("88", 4,
+        "pc=0000 f=01",
+        "a=01 f=00 pc=0001 r=01"),
+    Row("90", 4,
+        "pc=0000 a=80 b=01",
+        "a=7F f=3E pc=0001 r=01 q=3E"),
+    Row("90", 4,
+        "pc=0000 b=01",
+        "a=FF f=BB pc=0001 r=01 q=BB"),
+    Row("98", 4,
+        "pc=0000 a=10 f=01 b=01",
+        "a=0E f=1A pc=0001 r=01 q=1A"),
+    Row("A0", 4,
+        "pc=0000 a=F0 b=0F",
+        "a=00 f=54 pc=0001 r=01 q=54"),
+    Row("A0", 4,
+        "pc=0000 a=FF b=0F",
+        "a=0F f=1C pc=0001 r=01 q=1C"),
+    Row("A8", 4,
+        "pc=0000 a=FF b=0F",
+        "a=F0 f=A4 pc=0001 r=01 q=A4"),
+    Row("B0", 4,
+        "pc=0000 a=80 b=01",
+        "a=81 f=84 pc=0001 r=01 q=84"),
+    Row("B8", 4,
+        "pc=0000 a=42 b=42",
+        "f=42 pc=0001 r=01 q=42"),
+    Row("B8", 4,
+        "pc=0000 b=28",
+        "f=BB pc=0001 r=01 q=BB"),
+    Row("C6 11", 7,
+        "pc=1000 a=22",
+        "a=33 f=20 pc=1002 r=01 q=20"),
+    Row("ED 42", 15,
+        "pc=0000 b=01 h=02",
+        "f=02 h=01 pc=0002 wz=0201 r=02 q=02"),
+    Row("ED 42", 15,
+        "pc=0000 b=12 c=34 h=12 l=34",
+        "f=42 h=00 l=00 pc=0002 wz=1235 r=02 q=42"),
+    Row("ED 42", 15,
+        "pc=0000 c=01 h=80",
+        "f=3E h=7F l=FF pc=0002 wz=8001 r=02 q=3E"),
+    Row("ED 42", 15,
+        "pc=0000 c=01",
+        "f=BB h=FF l=FF pc=0002 wz=0001 r=02 q=BB"),
+    Row("ED 42", 15,
+        "pc=0000 f=01 c=01 h=10",
+        "f=1A h=0F l=FE pc=0002 wz=1001 r=02 q=1A"),
+    Row("ED 42", 15,
+        "pc=0000 h=12 l=34 wz=FFFF",
+        "f=02 pc=0002 wz=1235 r=02 q=02"),
+    Row("ED 44", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 44", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 44", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 4A", 15,
+        "pc=0000 b=01 h=01",
+        "h=02 pc=0002 wz=0101 r=02"),
+    Row("ED 4A", 15,
+        "pc=0000 c=01 h=7F l=FF",
+        "f=94 h=80 l=00 pc=0002 wz=8000 r=02 q=94"),
+    Row("ED 4A", 15,
+        "pc=0000 f=01 b=20 h=10",
+        "f=20 h=30 l=01 pc=0002 wz=1001 r=02 q=20"),
+    Row("ED 4A", 15,
+        "pc=0000 f=01 h=FF l=FF",
+        "f=51 h=00 l=00 pc=0002 r=02 q=51"),
+    Row("ED 4A", 15,
+        "pc=0000 h=12 l=34 wz=FFFF",
+        "pc=0002 wz=1235 r=02"),
+    Row("ED 4C", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 4C", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 4C", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 52", 15,
+        "pc=0000 d=01 h=02",
+        "f=02 h=01 pc=0002 wz=0201 r=02 q=02"),
+    Row("ED 54", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 54", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 54", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 5A", 15,
+        "pc=0000 d=01 h=01",
+        "h=02 pc=0002 wz=0101 r=02"),
+    Row("ED 5C", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 5C", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 5C", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 62", 15,
+        "pc=0000 h=02 sp=0100",
+        "f=42 h=00 pc=0002 wz=0201 r=02 q=42"),
+    Row("ED 64", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 64", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 64", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 6A", 15,
+        "pc=0000 h=01",
+        "h=02 pc=0002 wz=0101 r=02"),
+    Row("ED 6C", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 6C", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 6C", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 72", 15,
+        "pc=0000 h=02 sp=0100",
+        "f=02 h=01 pc=0002 wz=0201 r=02 q=02"),
+    Row("ED 74", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 74", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 74", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
+    Row("ED 7A", 15,
+        "pc=0000 h=01 sp=0100",
+        "h=02 pc=0002 wz=0101 r=02"),
+    Row("ED 7C", 8,
+        "pc=2000 a=01 f=C5 wz=BEEF r=3E q=C5",
+        "a=FF f=BB pc=2002 r=40 q=BB"),
+    Row("ED 7C", 8,
+        "pc=2000 a=80 f=C5 wz=BEEF r=3E q=C5",
+        "f=87 pc=2002 r=40 q=87"),
+    Row("ED 7C", 8,
+        "pc=2000 f=C5 wz=BEEF r=3E q=C5",
+        "f=42 pc=2002 r=40 q=42"),
 )
-def test_inc_dec_r_targets_all_registers(inc_opcode: int, dec_opcode: int, reg: str) -> None:
-    cpu = MemoryCPU()
-    setattr(cpu, reg, 0x05)
-    _program(cpu, 0x0000, inc_opcode)
-    assert cpu.decode_and_execute() == 4
-    assert getattr(cpu, reg) == 0x06
-    _program(cpu, 0x0000, dec_opcode)
-    cpu.decode_and_execute()
-    assert getattr(cpu, reg) == 0x05
+# fmt: on
 
 
-def test_inc_preserves_carry_and_sets_overflow() -> None:
-    cpu = MemoryCPU()
-    cpu.b = 0x7F
-    cpu.f.c = 1
-    _program(cpu, 0x0000, 0x04)  # INC B
-    cpu.decode_and_execute()
-    assert cpu.b == 0x80
-    assert cpu.f.pv == 1
-    assert cpu.f.c == 1  # INC/DEC never touch carry
-    assert cpu.f.s == 1
-    assert cpu.f.n == 0
-    assert cpu.f.h == 1
-
-
-def test_inc_zero_result() -> None:
-    cpu = MemoryCPU()
-    cpu.b = 0xFF
-    _program(cpu, 0x0000, 0x04)
-    cpu.decode_and_execute()
-    assert cpu.b == 0x00
-    assert cpu.f.z == 1
-    assert cpu.f.pv == 0
-    assert cpu.f.c == 0
-
-
-def test_dec_preserves_carry_and_sets_overflow() -> None:
-    cpu = MemoryCPU()
-    cpu.b = 0x80
-    cpu.f.c = 1
-    _program(cpu, 0x0000, 0x05)  # DEC B
-    cpu.decode_and_execute()
-    assert cpu.b == 0x7F
-    assert cpu.f.pv == 1
-    assert cpu.f.c == 1
-    assert cpu.f.n == 1
-    assert cpu.f.s == 0
-    assert cpu.f.h == 1  # borrow out of bit 3
-
-
-def test_inc_hl_updates_memory_and_preserves_carry() -> None:
-    cpu = MemoryCPU()
-    cpu.h = 0x40
-    cpu.l = 0x00
-    cpu.write_byte(0x4000, 0xFF)
-    cpu.f.c = 1
-    _program(cpu, 0x0000, 0x34)  # INC (HL)
-    assert cpu.decode_and_execute() == 11
-    assert cpu.read_byte(0x4000) == 0x00
-    assert cpu.f.z == 1
-    assert cpu.f.c == 1
-
-
-def test_dec_hl_updates_memory_and_preserves_carry() -> None:
-    cpu = MemoryCPU()
-    cpu.h = 0x40
-    cpu.l = 0x00
-    cpu.write_byte(0x4000, 0x00)
-    cpu.f.c = 1
-    _program(cpu, 0x0000, 0x35)  # DEC (HL)
-    assert cpu.decode_and_execute() == 11
-    assert cpu.read_byte(0x4000) == 0xFF
-    assert cpu.f.n == 1
-    assert cpu.f.h == 1
-    assert cpu.f.c == 1
-
-
-# --- DAA -------------------------------------------------------------------
-
-
-def test_daa_no_adjustment() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x15
-    _program(cpu, 0x0000, 0x27)  # DAA
-    assert cpu.decode_and_execute() == 4
-    assert cpu.a == 0x15
-    assert cpu.f.c == 0
-    assert cpu.f.z == 0
-    assert cpu.f.n == 0
-
-
-def test_daa_after_bcd_add_9_plus_9() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x12  # 0x09 + 0x09 left A=0x12 with H set
-    cpu.f.h = 1
-    _program(cpu, 0x0000, 0x27)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x18  # 9 + 9 = 18 in BCD
-    assert cpu.f.c == 0
-
-
-def test_daa_after_bcd_add_99_plus_1() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x9A  # 0x99 + 0x01 left A=0x9A with H set
-    cpu.f.h = 1
-    _program(cpu, 0x0000, 0x27)
-    cpu.decode_and_execute()
-    assert cpu.a == 0x00  # 99 + 1 = 100 in BCD, carry out
-    assert cpu.f.c == 1
-    assert cpu.f.z == 1
-
-
-# --- Q flag and WZ ---------------------------------------------------------
-
-
-def test_alu_ops_latch_q_and_leave_wz() -> None:
-    cpu = MemoryCPU()
-    cpu.a = 0x10
-    cpu.b = 0x20
-    cpu.wz = 0xABCD
-    _program(cpu, 0x0000, 0x80)  # ADD A,B
-    cpu.decode_and_execute()
-    assert cpu.q == cpu.f.byte
-    assert cpu.wz == 0xABCD
-
-
-def test_inc_dec_latch_q() -> None:
-    cpu = MemoryCPU()
-    cpu.b = 0x05
-    _program(cpu, 0x0000, 0x04)  # INC B
-    cpu.decode_and_execute()
-    assert cpu.q == cpu.f.byte
-    _program(cpu, 0x0000, 0x05)  # DEC B
-    cpu.decode_and_execute()
-    assert cpu.q == cpu.f.byte
+@pytest.mark.parametrize("row", ROWS, ids=str)
+def test_step(row: Row) -> None:
+    check_step(row)

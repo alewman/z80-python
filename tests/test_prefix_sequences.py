@@ -16,31 +16,12 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from conftest import MemoryCPU
 
-from z80_python import Z80CPU, disassemble_bytes, read_trace
+from z80_python import disassemble_bytes, read_trace
 from z80_python.conformance import diff_manifest, load_manifest
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "conformance"
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by a flat 64 KiB bytearray."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.memory = bytearray(0x10000)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        raise NotImplementedError("unit-test CPU does not model I/O ports")
-
-    def write_port(self, addr: int, value: int) -> None:
-        raise NotImplementedError("unit-test CPU does not model I/O ports")
 
 
 def _cpu(program: bytes, **registers: int) -> MemoryCPU:
