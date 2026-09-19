@@ -86,10 +86,11 @@ def test_capture_and_restore_cover_complete_cpu_owned_state_without_touching_hos
 
     state = cpu.capture_state()
     cpu.restore_state(CPUState())
+    assert flags_object.byte == 0  # a held cpu.f reads the CPU's F, not a copy
     cpu.restore_state(state)
 
     assert cpu.capture_state() == state
-    assert cpu.f is flags_object
+    assert flags_object.byte == state.f
     assert cpu.memory[0x1234] == 0x56
     assert cpu.ports[0x1234] == 0x78
 

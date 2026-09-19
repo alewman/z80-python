@@ -1,6 +1,6 @@
 """CPU state, fetch, stack, and register-selection helpers."""
 
-from z80_python._flags import Flags
+from z80_python._flags import Flags, FlagsView
 
 
 def _signed8(value: int) -> int:
@@ -13,7 +13,7 @@ class CoreMixin:
 
     def __init__(self) -> None:
         self.a = 0
-        self.f = Flags()
+        self._f = 0  # F; cpu.f is the public Flags view of it
         self.b = 0
         self.c = 0
         self.d = 0
@@ -43,6 +43,15 @@ class CoreMixin:
         self._pending_maskable_interrupt: int | None = None
         self._non_maskable_interrupt_pending = False
 
+    @property
+    def f(self) -> Flags:
+        """F as a :class:`Flags` whose bits read and write this CPU's F."""
+        return FlagsView(self)
+
+    @f.setter
+    def f(self, value: int | Flags) -> None:
+        self._f = int(value) & 0xFF
+
     def _inc_r(self) -> None:
         # R counts M1 (opcode fetch) cycles in its low 7 bits; bit 7 is only ever
         # written by LD R,A and is preserved across the increment.
@@ -52,7 +61,7 @@ class CoreMixin:
         # Q mirrors the ALU's last flag output: the new F when this instruction wrote
         # flags, else 0. Only SCF/CCF read it (undocumented X/Y). Q=0 from writing
         # F=0 is indistinguishable from 'not written', harmlessly: F's X/Y are 0 too.
-        self.q = self.f.byte if flags_modified else 0
+        self.q = self._f if flags_modified else 0
 
     # An opcode or prefix fetch is an M1 cycle and bumps R; operand and
     # displacement bytes (_read_operand_byte) are ordinary reads and do not.

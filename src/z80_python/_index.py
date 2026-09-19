@@ -5,6 +5,8 @@ instruction group; ``_index_dispatch.py`` routes them and adds the prefix cost.
 """
 
 from z80_python._core import _signed8
+from z80_python._flags import FLAG_H, FLAG_PV, FLAG_S, FLAG_XY, FLAG_Z
+from z80_python._rotate import _bit_flags
 
 
 class IndexMixin:
@@ -38,12 +40,14 @@ class IndexMixin:
         index = self._get_index(prefix)
         value = index if pair_index == 2 else self._read_pair(pair_index)
         self.wz = (index + 1) & 0xFFFF
-        result = index + value
-        self.f.c = 1 if result > 0xFFFF else 0
-        result &= 0xFFFF
-        self.f.n = 0
-        self.f.h = ((index ^ value ^ result) & 0x1000) >> 12
-        self.f.set_xy((result >> 8) & 0xFF)
+        z = index + value
+        result = z & 0xFFFF
+        self._f = (
+            (self._f & (FLAG_S | FLAG_Z | FLAG_PV))
+            | ((result >> 8) & FLAG_XY)
+            | (((index ^ value ^ result) >> 8) & FLAG_H)
+            | (z >> 16)
+        )
         self._set_index(prefix, result)
         self._update_q(True)
         return 15
@@ -294,14 +298,8 @@ class IndexMixin:
         """BIT b,(IX+d)/(IY+d)"""
         self.wz = (self._get_index(prefix) + _signed8(displacement)) & 0xFFFF
         value = self.read_byte(self.wz)
-        bit_index = (sub_opcode >> 3) & 0x07
-        bit_set = (value >> bit_index) & 1
-        self.f.n = 0
-        self.f.h = 1
-        self.f.z = 0 if bit_set else 1
-        self.f.pv = self.f.z
-        self.f.s = 1 if bit_index == 7 and bit_set else 0
-        self.f.set_xy(self.wz >> 8)
+        # X/Y come from the high byte of the computed address (WZ), not the byte.
+        self._f = _bit_flags(self._f, value, (sub_opcode >> 3) & 0x07, self.wz >> 8)
         self._update_q(True)
         return 20
 

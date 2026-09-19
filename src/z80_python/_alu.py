@@ -1,101 +1,101 @@
-"""Eight- and sixteen-bit arithmetic instruction implementation."""
+"""Eight- and sixteen-bit arithmetic instruction implementation.
+
+Each helper computes the whole new F in one expression. The flag masks and the
+SZXY/SZXYP tables are in _flags.py: SZXY[r] is S, Z and the undocumented Y/X
+as a result byte r sets them, and SZXYP adds PV as parity.
+"""
+
+from z80_python._flags import (
+    FLAG_C,
+    FLAG_H,
+    FLAG_N,
+    FLAG_PV,
+    FLAG_S,
+    FLAG_XY,
+    FLAG_Z,
+    SZXY,
+    SZXYP,
+)
 
 
 class ALUMixin:
     """Private arithmetic and logic implementation."""
 
-    def _set_sz(self, value: int) -> None:
-        self.f.s = (value >> 7) & 1
-        self.f.z = 1 if value == 0 else 0
-
-    def _set_xysz(self, value: int) -> None:
-        self.f.set_xy(value)
-        self._set_sz(value)
-
-    @staticmethod
-    def _parity(value: int) -> int:
-        value ^= value >> 4
-        value ^= value >> 2
-        value ^= value >> 1
-        return 0 if (value & 1) else 1
-
-    def _set_parity(self, value: int) -> None:
-        self.f.pv = self._parity(value)
-
     def _add(self, x: int, y: int, carry: int) -> int:
         z = x + y + carry
-        self.f.c = 1 if z > 0xFF else 0
-        z &= 0xFF
-        self.f.n = 0
-        self.f.pv = ((((x ^ y) ^ 0xFF) & (x ^ z)) & 0x80) >> 7
-        self.f.h = ((x ^ y ^ z) & 0x10) >> 4
-        self._set_xysz(z)
-        return z
+        r = z & 0xFF
+        # H: carry out of bit 3. PV: overflow, the operands agree in sign and the
+        # result does not (bit 7 moved down to PV's bit 2). C: bit 8 of the sum.
+        self._f = (
+            SZXY[r] | ((x ^ y ^ r) & FLAG_H) | (((x ^ y ^ 0x80) & (x ^ r) & 0x80) >> 5) | (z >> 8)
+        )
+        return r
 
     def _sub(self, x: int, y: int, carry: int) -> int:
-        z = (x - y - carry) & 0x1FF
-        self.f.c = 1 if z > 0xFF else 0
-        z &= 0xFF
-        self.f.n = 1
-        self.f.pv = (((x ^ y) & (x ^ z)) & 0x80) >> 7
-        self.f.h = ((x ^ y ^ z) & 0x10) >> 4
-        self._set_xysz(z)
-        return z
+        z = x - y - carry
+        r = z & 0xFF
+        # H: borrow into bit 4. PV: the operands differ in sign and the result's
+        # sign differs from x's. C: the borrow, bit 8 of the difference.
+        self._f = (
+            SZXY[r]
+            | ((x ^ y ^ r) & FLAG_H)
+            | (((x ^ y) & (x ^ r) & 0x80) >> 5)
+            | FLAG_N
+            | ((z >> 8) & FLAG_C)
+        )
+        return r
 
     def _and(self, x: int, y: int) -> int:
-        z = x & y
-        self.f.c = 0
-        self.f.n = 0
-        self._set_parity(z)
-        self.f.h = 1
-        self._set_xysz(z)
-        return z
+        r = x & y
+        self._f = SZXYP[r] | FLAG_H
+        return r
 
     def _or(self, x: int, y: int) -> int:
-        z = x | y
-        self.f.c = 0
-        self.f.n = 0
-        self.f.h = 0
-        self._set_parity(z)
-        self._set_xysz(z)
-        return z
+        r = x | y
+        self._f = SZXYP[r]
+        return r
 
     def _xor(self, x: int, y: int) -> int:
-        z = x ^ y
-        self.f.c = 0
-        self.f.n = 0
-        self.f.h = 0
-        self._set_parity(z)
-        self._set_xysz(z)
-        return z
+        r = x ^ y
+        self._f = SZXYP[r]
+        return r
 
     def _cp(self, x: int, y: int) -> None:
-        z = (x - y) & 0x1FF
-        self.f.c = 1 if z > 0xFF else 0
-        z &= 0xFF
-        self.f.n = 1
+        z = x - y
+        r = z & 0xFF
         # CP is a discarded SUB: X/Y sample the operand still on the internal bus,
         # not the thrown-away result.
-        self.f.set_xy(y)
-        self._set_sz(z)
-        self.f.pv = (((x ^ y) & (x ^ z)) & 0x80) >> 7
-        self.f.h = ((x ^ y ^ z) & 0x10) >> 4
+        self._f = (
+            (SZXY[r] & (FLAG_S | FLAG_Z))
+            | (y & FLAG_XY)
+            | ((x ^ y ^ r) & FLAG_H)
+            | (((x ^ y) & (x ^ r) & 0x80) >> 5)
+            | FLAG_N
+            | ((z >> 8) & FLAG_C)
+        )
 
     def _inc(self, x: int) -> int:
-        z = (x + 1) & 0xFF
-        self.f.n = 0
-        self.f.pv = 1 if z == 0x80 else 0
-        self._set_xysz(z)
-        self.f.h = 1 if (z & 0x0F) == 0 else 0
-        return z
+        r = (x + 1) & 0xFF
+        # C is untouched. H: the low nibble wrapped to 0. PV: 0x7F became 0x80.
+        self._f = (
+            (self._f & FLAG_C)
+            | SZXY[r]
+            | (FLAG_H if (r & 0x0F) == 0 else 0)
+            | (FLAG_PV if r == 0x80 else 0)
+        )
+        return r
 
     def _dec(self, x: int) -> int:
-        z = (x - 1) & 0xFF
-        self.f.n = 1
-        self.f.pv = 1 if z == 0x7F else 0
-        self._set_xysz(z)
-        self.f.h = 1 if (z & 0x0F) == 0x0F else 0
-        return z
+        r = (x - 1) & 0xFF
+        # C is untouched. H: the low nibble wrapped to F. PV: 0x80 became 0x7F.
+        self._f = (
+            (self._f & FLAG_C)
+            | SZXY[r]
+            | FLAG_N
+            | (FLAG_H if (r & 0x0F) == 0x0F else 0)
+            | (FLAG_PV if r == 0x7F else 0)
+        )
+        return r
 
     def _op_alu_r(self, opcode: int) -> int:
         """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,r -- 8-bit ALU with a register or (HL) operand."""
@@ -127,11 +127,11 @@ class ALUMixin:
         if group == 0:
             self.a = self._add(self.a, value, 0)
         elif group == 1:
-            self.a = self._add(self.a, value, self.f.c)
+            self.a = self._add(self.a, value, self._f & FLAG_C)
         elif group == 2:
             self.a = self._sub(self.a, value, 0)
         elif group == 3:
-            self.a = self._sub(self.a, value, self.f.c)
+            self.a = self._sub(self.a, value, self._f & FLAG_C)
         elif group == 4:
             self.a = self._and(self.a, value)
         elif group == 5:
@@ -171,73 +171,75 @@ class ALUMixin:
 
     def _op_daa(self) -> int:
         """DAA -- decimal-adjust A after a BCD ADD/SUB, steered by H, N, and C."""
-        original = self.a
+        original = a = self.a
+        f = self._f
+        carry = f & FLAG_C
         # DAA: a tens digit above 9, or a carry out of it, means the BCD result
         # overflowed 99; correct by 0x60 (direction from N) and force C. The
         # second test does the same for the units digit via H and 0x06.
-        if self.f.c or self.a > 0x99:
-            self.a = (self.a + (-0x60 if self.f.n else 0x60)) & 0xFF
-            self.f.c = 1
-        if self.f.h or (self.a & 0x0F) > 0x09:
-            self.a = (self.a + (-0x06 if self.f.n else 0x06)) & 0xFF
-        self._set_parity(self.a)
-        self._set_xysz(self.a)
-        self.f.h = ((self.a ^ original) & 0x10) >> 4
+        if carry or a > 0x99:
+            a = (a + (-0x60 if f & FLAG_N else 0x60)) & 0xFF
+            carry = FLAG_C
+        if f & FLAG_H or (a & 0x0F) > 0x09:
+            a = (a + (-0x06 if f & FLAG_N else 0x06)) & 0xFF
+        self.a = a
+        self._f = SZXYP[a] | ((a ^ original) & FLAG_H) | (f & FLAG_N) | carry
         self._update_q(True)
         return 4
 
     def _op_cpl(self) -> int:
         """CPL -- complement A, setting H/N and X/Y from the result."""
         self.a ^= 0xFF
-        self.f.h = 1
-        self.f.n = 1
-        self.f.set_xy(self.a)
+        self._f = (
+            (self._f & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | FLAG_H | FLAG_N | (self.a & FLAG_XY)
+        )
         self._update_q(True)
         return 4
 
     def _op_scf_ccf(self, opcode: int) -> int:
         """SCF/CCF -- including their Q-sensitive undocumented X/Y behavior."""
+        f = self._f
         # Q holds F only if the previous M1 cycle wrote flags. If it did, F's X/Y
         # are masked and A alone supplies them; otherwise X/Y = (F | A). A DD/FD
         # prefix is its own M1 that writes no flags, so a prefixed SCF/CCF sees Q=0
         # (_execute_index clears it).
-        if self.q:
-            self.f.set_xy(0)
-        old_carry = self.f.c
+        xy = (self.a if self.q else f | self.a) & FLAG_XY
         if opcode == 0x37:
-            self.f.c = 1
-            self.f.h = 0
+            carry_and_h = FLAG_C
+        elif f & FLAG_C:  # CCF: H takes the old carry, C its complement
+            carry_and_h = FLAG_H
         else:
-            self.f.c = old_carry ^ 1
-            self.f.h = old_carry
-        self.f.n = 0
-        self.f.set_xy(self.f.byte | self.a)
+            carry_and_h = FLAG_C
+        self._f = (f & (FLAG_S | FLAG_Z | FLAG_PV)) | xy | carry_and_h
         self._update_q(True)
         return 4
 
     def _add16(self, x: int, y: int, carry: int) -> int:
-        result = x + y + carry
-        self.f.c = 1 if result > 0xFFFF else 0
-        result &= 0xFFFF
-        self.f.n = 0
-        self.f.h = ((x ^ y ^ result) & 0x1000) >> 12
-        self.f.pv = ((((x ^ y) ^ 0xFFFF) & (x ^ result)) & 0x8000) >> 15
-        self.f.s = (result >> 15) & 1
-        self.f.z = 1 if result == 0 else 0
-        self.f.set_xy((result >> 8) & 0xFF)
-        return result
+        z = x + y + carry
+        r = z & 0xFFFF
+        # The 8-bit rules, one byte up: S, Y and X from the high byte, H from bit
+        # 11, PV from bit 15, C from bit 16.
+        self._f = (
+            ((r >> 8) & (FLAG_S | FLAG_XY))
+            | (FLAG_Z if r == 0 else 0)
+            | (((x ^ y ^ r) >> 8) & FLAG_H)
+            | (((x ^ y ^ 0x8000) & (x ^ r) & 0x8000) >> 13)
+            | (z >> 16)
+        )
+        return r
 
     def _sub16(self, x: int, y: int, carry: int) -> int:
-        result = x - y - carry
-        self.f.c = 1 if result < 0 else 0
-        result &= 0xFFFF
-        self.f.n = 1
-        self.f.h = ((x ^ y ^ result) & 0x1000) >> 12
-        self.f.pv = (((x ^ y) & (x ^ result)) & 0x8000) >> 15
-        self.f.s = (result >> 15) & 1
-        self.f.z = 1 if result == 0 else 0
-        self.f.set_xy((result >> 8) & 0xFF)
-        return result
+        z = x - y - carry
+        r = z & 0xFFFF
+        self._f = (
+            ((r >> 8) & (FLAG_S | FLAG_XY))
+            | (FLAG_Z if r == 0 else 0)
+            | (((x ^ y ^ r) >> 8) & FLAG_H)
+            | (((x ^ y) & (x ^ r) & 0x8000) >> 13)
+            | FLAG_N
+            | ((z >> 16) & FLAG_C)
+        )
+        return r
 
     def _op_add_hl_rr(self, opcode: int) -> int:
         """ADD HL,rr -- only H, N, C and X/Y change; S/Z/PV are preserved."""
@@ -246,12 +248,14 @@ class ALUMixin:
         value = self._read_pair(pair_index)
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
-        result = hl + value
-        self.f.c = 1 if result > 0xFFFF else 0
-        result &= 0xFFFF
-        self.f.n = 0
-        self.f.h = ((hl ^ value ^ result) & 0x1000) >> 12
-        self.f.set_xy((result >> 8) & 0xFF)
+        z = hl + value
+        result = z & 0xFFFF
+        self._f = (
+            (self._f & (FLAG_S | FLAG_Z | FLAG_PV))
+            | ((result >> 8) & FLAG_XY)
+            | (((hl ^ value ^ result) >> 8) & FLAG_H)
+            | (z >> 16)
+        )
         self._write_pair(2, result)
         self._update_q(True)
         return 11
@@ -262,7 +266,7 @@ class ALUMixin:
         hl = self._hl()
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
-        self._write_pair(2, self._add16(hl, self._read_pair(pair_index), self.f.c))
+        self._write_pair(2, self._add16(hl, self._read_pair(pair_index), self._f & FLAG_C))
         self._update_q(True)
         return 15
 
@@ -272,7 +276,7 @@ class ALUMixin:
         hl = self._hl()
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
-        self._write_pair(2, self._sub16(hl, self._read_pair(pair_index), self.f.c))
+        self._write_pair(2, self._sub16(hl, self._read_pair(pair_index), self._f & FLAG_C))
         self._update_q(True)
         return 15
 

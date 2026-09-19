@@ -1,5 +1,7 @@
 """Block transfer and search instruction implementation."""
 
+from z80_python._flags import FLAG_C, FLAG_H, FLAG_N, FLAG_PV, FLAG_S, FLAG_X, FLAG_XY, FLAG_Z
+
 
 class BlockMixin:
     """Private ED block-transfer and search implementation."""
@@ -15,14 +17,17 @@ class BlockMixin:
             hl, de = (src - 1) & 0xFFFF, (dst - 1) & 0xFFFF
         self.h, self.l = (hl >> 8) & 0xFF, hl & 0xFF
         self.d, self.e = (de >> 8) & 0xFF, de & 0xFF
-        self.f.n = self.f.h = 0
         bc = (self._bc() - 1) & 0xFFFF
-        self.f.pv = 1 if bc else 0
         self.b, self.c = (bc >> 8) & 0xFF, bc & 0xFF
-        # LD group: X/Y come from A + transferred byte, landing in bits 3 and 1
-        # (not 3 and 5). Y here is bit 1 of that sum, the documented-undocumented rule.
-        self.f.x = ((self.a + data) & 0x08) >> 3
-        self.f.y = ((self.a + data) & 0x02) >> 1
+        # LD group: X/Y come from A + transferred byte, taken from bits 3 and 1
+        # (not 3 and 5): X is bit 3 of that sum, Y is its bit 1 moved up to bit 5.
+        n = self.a + data
+        self._f = (
+            (self._f & (FLAG_S | FLAG_Z | FLAG_C))
+            | (n & FLAG_X)
+            | ((n & 0x02) << 4)
+            | (FLAG_PV if bc else 0)
+        )
         return bc != 0
 
     def _block_cp(self, increment: bool) -> bool:
@@ -36,25 +41,30 @@ class BlockMixin:
             hl = (src - 1) & 0xFFFF
         self.h, self.l = (hl >> 8) & 0xFF, hl & 0xFF
         result = (self.a - data) & 0xFF
-        self.f.n = 1
         bc = (self._bc() - 1) & 0xFFFF
-        self.f.pv = 1 if bc else 0
         self.b, self.c = (bc >> 8) & 0xFF, bc & 0xFF
-        self.f.h = ((self.a ^ data ^ result) & 0x10) >> 4
+        half = (self.a ^ data ^ result) & FLAG_H
         # X/Y come from A - (HL) - H, the ALU's intermediate before the final
-        # correction, and land in bits 3 and 1 (not 3 and 5) for the CP group.
-        self.f.x = ((result - self.f.h) & 0x08) >> 3
-        self.f.y = ((result - self.f.h) & 0x02) >> 1
-        self._set_sz(result)
-        return bc != 0 and self.f.z == 0
+        # correction, and are taken from bits 3 and 1 (not 3 and 5) for the CP group.
+        n = result - (half >> 4)
+        self._f = (
+            (self._f & FLAG_C)
+            | (result & FLAG_S)
+            | (0 if result else FLAG_Z)
+            | half
+            | (n & FLAG_X)
+            | ((n & 0x02) << 4)
+            | (FLAG_PV if bc else 0)
+            | FLAG_N
+        )
+        return bc != 0 and result != 0
 
     def _block_repeat(self) -> None:
         self.pc = (self.pc - 2) & 0xFFFF
         self.wz = (self.pc + 1) & 0xFFFF
         # On a repeat the CPU rewinds PC by 2 and re-fetches; X/Y then sample bits 3
         # and 5 of the rewound PC's high byte (PC bits 11 and 13), and WZ = PC + 1.
-        self.f.x = (self.pc >> 11) & 1
-        self.f.y = (self.pc >> 13) & 1
+        self._f = (self._f & ~FLAG_XY) | ((self.pc >> 8) & FLAG_XY)
 
     def _op_ldi(self) -> int:
         """LDI -- (DE) <- (HL); HL++, DE++, BC--."""
