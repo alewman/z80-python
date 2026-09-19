@@ -22,6 +22,21 @@ jobs:
       - run: python -m ruff check .
       - run: python examples/minimal_z80_host.py
 
+  # The one external oracle small enough to run on every push: a ~2 MB tarball
+  # and 1,356 single-instruction cases. The heavier gates -- SingleStepTests,
+  # z80test, ZEXDOC/ZEXALL -- run in oracles.yml.
+  fuse-oracle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python scripts/fetch_fuse_tests.py
+      - run: python -m pytest tests/test_fuse_suite.py -q
+
   package:
     runs-on: ubuntu-latest
     steps:

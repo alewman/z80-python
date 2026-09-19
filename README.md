@@ -1,5 +1,8 @@
 # z80-python
 
+[![CI](https://github.com/alewman/z80-python/actions/workflows/ci.yml/badge.svg)](https://github.com/alewman/z80-python/actions/workflows/ci.yml)
+[![Oracles](https://github.com/alewman/z80-python/actions/workflows/oracles.yml/badge.svg)](https://github.com/alewman/z80-python/actions/workflows/oracles.yml)
+
 A readable, pure-Python Z80 **instruction-core reference implementation**.
 
 `z80-python` is a SingleStep-complete and ZEX-certified processor core built to
@@ -49,6 +52,23 @@ limits are recorded in [the validation evidence](docs/validation.md).
 
 This is an instruction-level semantic and lifecycle claim. It is **not** a claim
 of cycle-accurate bus-pin behavior or of a complete computer.
+
+### CI coverage
+
+The two badges cover different things, and neither covers everything. A green
+**CI** badge alone would not mean the oracle gates above passed, so they are
+separated rather than implied:
+
+| Badge | Runs | When |
+| --- | --- | --- |
+| **CI** | unit and integration suite, Ruff, the example host, a wheel build and installed-API smoke test, on Python 3.11/3.12/3.13; plus the FUSE oracle | every push and pull request |
+| **Oracles** | SingleStepTests (1,604 files, 1,604,000 cases), z80test (`z80full`, `z80ccf`, `z80memptr`), FUSE, and the superzazu/z80 interrupt cross-check, each against its pinned corpus | weekly, and on demand |
+
+**ZEXDOC and ZEXALL are certified locally, not in CI.** They need
+`zexdoc.com`/`zexall.com`, which no script here fetches, and take roughly 90
+minutes each under CPython. Their revisions, file hashes, commands and timings
+are in [the validation evidence](docs/validation.md); treat that record, not a
+badge, as the citation for those two gates.
 
 ## Vibe coded, oracle validated
 
