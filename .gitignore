@@ -23,3 +23,7 @@ validation/interrupt_oracle_src/
 
 # Reference manuals (Zilog UM0080, Young); fetch with scripts/fetch_reference_docs.py.
 reference/
+
+# ZEX recipe outputs (examples/conformance/zex/README.md): the GPL programs and their checkpoints.
+examples/conformance/zex/*.com
+examples/conformance/zex/*-segments/

@@ -111,6 +111,10 @@ z80-rust's `scripts/rung3.sh` is a worked example.
 `examples/conformance/` holds three manifests with their committed reference
 traces: a straight-line flag and branch program, an interrupt scenario with a
 maskable accept, RETI, an NMI, and RETN, and a program of DD/FD prefix runs.
+`examples/conformance/zex/` has the ZEXDOC and ZEXALL manifests for rung 3,
+the recipe above as commands, and the SHA-256 of all 116 checkpoints of each,
+so a port can check that its checkpoints are exactly the reference's before
+diffing them in parallel.
 `examples/conformance/interrupts/` holds the ten scenarios of
 `validation/interrupt_crosscheck.py` as manifests with `events`, each with its
 reference trace; they are rung 5 of the ladder below.
