@@ -3,8 +3,8 @@
 from dataclasses import FrozenInstanceError, asdict, replace
 
 import pytest
+from conftest import MemoryCPU
 
-from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import Z80CPU, CPUState, Flags
 from z80_python.cpu import Z80CPU as CpuModuleZ80CPU
 from z80_python.cpu import CPUState as CpuModuleCPUState
@@ -17,18 +17,41 @@ def test_root_and_historical_module_exports_are_compatible() -> None:
     assert CPUState is CpuModuleCPUState
 
 
-def test_minimal_host_masks_memory_and_io_boundaries() -> None:
-    cpu = MinimalZ80Host()
+def test_two_callables_are_a_complete_host_with_an_unconnected_io_bus() -> None:
+    memory = bytearray(0x10000)
+    cpu = Z80CPU(memory.__getitem__, memory.__setitem__)
+    memory[:4] = bytes((0xDB, 0x12, 0xD3, 0x34))  # IN A,(12h); OUT (34h),A
 
-    cpu.write_byte(0x1_2345, 0x1AB)
-    cpu.write_port(0x1_FEDC, 0x155)
+    assert cpu.step() == 11
+    assert cpu.a == 0xFF  # nothing drives the data bus
+    assert cpu.step() == 11  # and the write goes nowhere
+    assert memory[:4] == bytes((0xDB, 0x12, 0xD3, 0x34))
 
-    assert cpu.read_byte(0x2345) == 0xAB
-    assert cpu.read_port(0xFEDC) == 0x55
+
+def test_bus_callables_are_validated_and_replaceable() -> None:
+    memory = bytearray(0x10000)
+    with pytest.raises(TypeError, match="write_byte must be callable"):
+        Z80CPU(memory.__getitem__, memory)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="read_port must be callable"):
+        Z80CPU(memory.__getitem__, memory.__setitem__, read_port=0xFF)  # type: ignore[arg-type]
+
+    cpu = Z80CPU(memory.__getitem__, memory.__setitem__)
+    reads: list[int] = []
+    cpu.read_byte = lambda address: reads.append(address) or memory[address]
+    cpu.step()  # NOP
+    assert reads == [0x0000]
+
+
+def test_subclass_defining_the_old_bus_methods_is_refused_with_the_new_form() -> None:
+    with pytest.raises(TypeError, match=r"Z80CPU\(read_byte, write_byte, \*, read_port=None"):
+
+        class OldHost(Z80CPU):
+            def read_byte(self, addr: int) -> int:
+                return 0
 
 
 def test_step_executes_one_instruction_and_preserves_historical_name() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     cpu.memory[:3] = bytes((0x3E, 0x2A, 0x3C))  # LD A,2Ah; INC A
 
     assert cpu.step() == 7
@@ -47,7 +70,7 @@ def test_cpu_state_is_immutable_comparable_and_serializable() -> None:
 
 
 def test_capture_and_restore_cover_complete_cpu_owned_state_without_touching_host() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     cpu.a, cpu.f.byte, cpu.b, cpu.c = 1, 2, 3, 4
     cpu.d, cpu.e, cpu.h, cpu.l = 5, 6, 7, 8
     cpu.ix, cpu.iy, cpu.sp, cpu.pc, cpu.wz = 0x1111, 0x2222, 0x3333, 0x4444, 0x5555
@@ -89,14 +112,14 @@ def test_cpu_state_rejects_values_outside_its_contract(field: str, value: object
 
 
 def test_restore_requires_a_cpu_state() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
 
     with pytest.raises(TypeError, match="CPUState"):
         cpu.restore_state({})  # type: ignore[arg-type]
 
 
 def test_restored_ei_delay_and_pending_interrupt_continue_deterministically() -> None:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     cpu.memory[:2] = bytes((0xFB, 0x00))  # EI; NOP
     cpu.sp = 0x4000
 

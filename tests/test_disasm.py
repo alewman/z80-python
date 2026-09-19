@@ -3,8 +3,8 @@
 from collections.abc import Iterable
 
 import pytest
+from conftest import MemoryCPU
 
-from examples.minimal_z80_host import MinimalZ80Host
 from z80_python import Instruction, disassemble, disassemble_bytes
 
 
@@ -34,7 +34,7 @@ def test_representative_instruction_forms(
 def test_reader_wraps_across_end_of_address_space_without_mutating_a_cpu() -> None:
     memory = bytearray(0x10000)
     memory[0xFFFF], memory[0], memory[1] = 0xC3, 0x34, 0x12
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     before = cpu.capture_state()
 
     instruction = disassemble(memory.__getitem__, 0xFFFF)
@@ -55,7 +55,7 @@ def test_byte_sequence_reports_truncation() -> None:
 
 
 def _supported_by_cpu(encoded: Iterable[int]) -> bool:
-    cpu = MinimalZ80Host()
+    cpu = MemoryCPU()
     cpu.memory[0x1000:0x1008] = bytes(encoded)
     cpu.pc = 0x1000
     cpu.sp = 0x8000

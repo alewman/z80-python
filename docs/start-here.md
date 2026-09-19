@@ -133,6 +133,49 @@ The comments on the lines that implement each of these say why the hardware
 does it. [undocumented-behavior](undocumented-behavior.md) collects the rules
 in one place.
 
+## The embedding contract
+
+The host owns memory and every device; the CPU owns its registers and nothing
+else. m6800-python takes its bus the same way, so a host for one family core
+reads like a host for another.
+
+```python
+from z80_python import Z80CPU
+
+cpu = Z80CPU(bus.read, bus.write, read_port=io.read, write_port=io.write)
+while True:
+    t_states = cpu.step()          # one instruction, or one lifecycle boundary
+    devices.tick(t_states)         # the host advances timers, video, sound
+    if devices.irq:
+        cpu.request_maskable_interrupt(devices.vector)
+```
+
+- `read_byte(address) -> int` and `write_byte(address, value)` are the memory
+  bus; both are required. `read_port(port) -> int` and `write_port(port,
+  value)` are the I/O bus, where `port` is the full 16-bit address the Z80
+  drives (A or B on the high byte; see `IN A,(n)` and `IN r,(C)`). Leave them
+  out and the I/O bus is unconnected: reads return 0xFF, writes go nowhere.
+- The core always passes a 16-bit address and an 8-bit value, so a host never
+  masks: `Z80CPU(memory.__getitem__, memory.__setitem__)` is a complete flat
+  host. The SingleStepTests host (`validation/vector_utils.py`) fails any case
+  that breaks this, so all 1,604,000 cases certify it.
+- The four callables are plain attributes of the CPU and may be replaced at
+  any time.
+- `step()` returns the instruction's (or interrupt's) T-states; the host keeps
+  the clock. Registers are plain attributes the host may read and set.
+- RESET, NMI and maskable interrupts are requested by method, between steps:
+  see [interrupt-lifecycle](interrupt-lifecycle.md).
+- Until 0.4.0 a host subclassed `Z80CPU` and defined `read_byte` and the rest
+  as methods. Such a class is now refused when it is defined, with a
+  `TypeError` naming the form above. Subclassing to add host state is still
+  fine; `tests/conftest.py`'s `MemoryCPU` does it.
+- A host that passes its *own* bound methods (`self.read`) makes the CPU a
+  reference cycle, freed only by the cyclic collector. That is harmless for
+  one long-lived machine; a runner that builds a CPU per test case should
+  pass closures or another object's methods instead, as
+  `validation/vector_utils.py` does (constructing 1.6 million CPUs went from
+  2 µs each to 21 µs when it did not).
+
 ## Interrupts
 
 RESET, NMI, and maskable interrupts are modeled as transitions between

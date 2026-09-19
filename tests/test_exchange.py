@@ -19,27 +19,7 @@ which is the intended regression signal.
 
 from __future__ import annotations
 
-from z80_python import Z80CPU
-
-
-class MemoryCPU(Z80CPU):
-    """Concrete Z80CPU backed by a flat 64 KiB bytearray."""
-
-    def __init__(self, memory: bytes = bytes(0x10000)) -> None:
-        super().__init__()
-        self.memory = bytearray(memory)
-
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
-
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        raise NotImplementedError("test MemoryCPU does not model I/O ports")
-
-    def write_port(self, addr: int, value: int) -> None:
-        raise NotImplementedError("test MemoryCPU does not model I/O ports")
+from conftest import MemoryCPU
 
 
 def _program(cpu: MemoryCPU, pc: int, *bytes_: int) -> None:

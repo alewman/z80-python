@@ -166,20 +166,14 @@ class _FuseHostCPU(Z80CPU):
     """coretest.c's machine: patterned RAM, ports that read back their high byte."""
 
     def __init__(self) -> None:
-        super().__init__()
         self.memory = bytearray(b"\xde\xad\xbe\xef" * 0x4000)
+        super().__init__(
+            self.memory.__getitem__, self.memory.__setitem__, read_port=_port_high_byte
+        )
 
-    def read_byte(self, addr: int) -> int:
-        return self.memory[addr & 0xFFFF]
 
-    def write_byte(self, addr: int, value: int) -> None:
-        self.memory[addr & 0xFFFF] = value & 0xFF
-
-    def read_port(self, addr: int) -> int:
-        return (addr >> 8) & 0xFF
-
-    def write_port(self, addr: int, value: int) -> None:
-        pass
+def _port_high_byte(port: int) -> int:
+    return port >> 8
 
 
 def run_case(case: FuseCase, expected: FuseExpected) -> list[str]:

@@ -50,7 +50,7 @@ All phases must preserve these properties:
    terminal formatting. No timestamps, colors, or prose are part of its data
    contract.
 8. Existing hosts remain source-compatible. New debugging capabilities are
-   adapters or optional protocols, not new abstract methods on `Z80CPU`.
+   adapters or optional protocols, not new required arguments to `Z80CPU`.
 
 These constraints strengthen the reference-core philosophy: the CPU stays easy
 to read and embed, while its behavior becomes easier to observe and explain.
@@ -66,9 +66,8 @@ Several tempting implementations should be avoided:
   implemented by its host, so only the host can reliably report semantic or
   side-effecting accesses. The debug protocol can accept access events, and
   instrumented hosts can produce them.
-- Do not make a TUI-specific CPU subclass. Real machines already subclass
-  `Z80CPU`; the debugger must wrap a machine instance rather than compete for its
-  inheritance slot.
+- Do not make a TUI-specific CPU subclass. The debugger must wrap a machine's
+  CPU instance, as access tracking does by wrapping its bus callables.
 - Do not add an AI orchestrator, prompt engine, or "repair suggestions" module to
   the library. The reusable feature is a deterministic command and observation
   surface. AI products can consume that surface externally.
