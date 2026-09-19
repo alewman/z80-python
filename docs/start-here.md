@@ -153,8 +153,8 @@ from z80_python import Z80CPU
 
 cpu = Z80CPU(bus.read, bus.write, read_port=io.read, write_port=io.write)
 while True:
-    t_states = cpu.step()          # one instruction, or one lifecycle boundary
-    devices.tick(t_states)         # the host advances timers, video, sound
+    t_states = cpu.step()  # one instruction, or one lifecycle boundary
+    devices.tick(t_states)  # the host advances timers, video, sound
     if devices.irq:
         cpu.request_maskable_interrupt(devices.vector)
 ```
