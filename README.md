@@ -57,9 +57,9 @@ A lower tier detects; the highest tier that checks a claim decides it
 The order of memory accesses has no hardware-captured oracle at all: it rests
 on SingleStepTests and FUSE agreeing.
 
-The current processor implementation was recertified after the lifecycle and
-inspection work. Exact source revisions, hashes, commands, timings, and scope
-limits are recorded in [the validation evidence](docs/validation.md).
+Release 0.4.0 was certified against every one of these, on both CPython and
+PyPy, at commit `b1720b6`. Exact source revisions, hashes, commands, timings,
+and scope limits are recorded in [the validation evidence](docs/validation.md).
 
 This is an instruction-level semantic and lifecycle claim. It is **not** a claim
 of cycle-accurate bus-pin behavior or of a complete computer.

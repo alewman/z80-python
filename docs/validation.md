@@ -40,6 +40,47 @@ oracle compares state, not the sequence of accesses that produced it, so the
 order claim below rests on SingleStepTests' pin traces and FUSE's bus events,
 two emulator-derived sources that agree.
 
+## Certification record: commit `b1720b6` (2026-09-18), release 0.4.0
+
+Every gate, both interpreters, against the commit that prepared 0.4.0. The
+commits after it on the release branch change only documentation, workflows
+and the dev extra's ruff pin: `src/`, `validation/`, `tests/`, `benchmarks/`,
+`examples/` and `scripts/` are byte-identical to `b1720b6`. Linux x86_64,
+i9-13900K, each gate pinned to its own performance core, CPython 3.14.4 and
+PyPy 7.3.20 / Python 3.11.13, all gates run at once while other users held a
+load average of about 45-50 on the shared machine; the timings are therefore
+upper bounds, and "Speed" below has the load-independent comparison.
+
+| Gate | Tier | Result | CPython 3.14.4 | PyPy 7.3.20 |
+| --- | --- | --- | ---: | ---: |
+| SingleStepTests, 1,604 files, 1,604,000 cases: registers, RAM, I/O, T-states, bus transactions | emulator-derived | all passed | 252.4 s | 246.4 s |
+| Fast suite (`--deselect` both corpus files) incl. readability and the row files | -- | 4,653 passed, 2 skipped, 7 xfailed | 17.6 s | -- |
+| z80test `z80full` / `z80memptr` / `z80ccf` | hardware-captured | all tests passed | 164.3 / 85.5 / 78.0 s | 11.0 / 9.0 / 7.1 s |
+| ZEXDOC | hardware-captured | 67/67 `OK`, `Tests complete` | 5,349.8 s | 334.9 s |
+| ZEXALL | hardware-captured | 67/67 `OK`, `Tests complete` | 5,482.4 s | 421.5 s |
+| FUSE 1.6.0, 1,356 cases | emulator-derived | 1,350 passed, 6 pinned xfails | 7.1 s | -- |
+| Interrupt cross-check vs superzazu/z80 | emulator-derived | 9 passed, 1 xfail (oracle's IM 0 double-charge) | 0.3 s | -- |
+
+Commands, from the repository root with the oracles fetched:
+
+```text
+python -m pytest -q tests/test_z80.py
+python -m pytest -q --deselect tests/test_z80test_suite.py --deselect tests/test_z80.py
+python -m pytest -q tests/test_z80test_suite.py --durations=3
+python -m pytest -q tests/test_fuse_suite.py
+python -m pytest -q -rx tests/test_interrupt_crosscheck.py
+Z80_PYTHON_ZEX_DIR=tests/zex python -m pytest -q tests/test_zex_integration.py
+```
+
+The ZEX figures above come from `ZexRunner.from_file(program).run()` timed
+directly, one program per process, which is what the last command runs. The
+CPython ZEX runs took about 90 minutes each under that load, against 5,524 s
+and 5,624 s for 0.3.0 on a lightly loaded machine; `ZexRunner` checks the CP/M
+traps before every step, so it runs slower than the bare `step()` loop the
+speed ladder measures.
+GitHub's Oracles workflow ran SingleStepTests, z80test, FUSE and the
+cross-check against the same commit and passed.
+
 ## Certification record: commit `9e15acc` (2026-09-06)
 
 Reproduced on Linux x86_64 under both supported interpreters, CPython 3.14.4
@@ -170,7 +211,9 @@ shared, loaded machine, through `validation.zex.ZexRunner` driven by
 instructions, 278.2 s; ZEXALL 67/67 `OK`, `Tests complete`, 5,764,169,474
 instructions, 276.5 s. Same SHA-256 as above. CPython was not rerun; the
 certification policy needs one interpreter per semantic change, and the
-SingleStepTests, z80test and FUSE gates ran on CPython at every rung.
+SingleStepTests, z80test and FUSE gates ran on CPython at every rung. The
+release commit `b1720b6` was then certified on both interpreters; see its
+record above.
 
 The 0.2.0 release candidate was recertified under PyPy 7.3.20 / Python 3.11.13
 after the RESET, state, disassembly, and debugger additions. ZEXDOC passed in
