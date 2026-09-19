@@ -109,10 +109,13 @@ says so.
   the only ones. `Flags`, `cpu.f`, `CPUState`, the debugger values, the
   trace and conformance surfaces keep working; everything else is additive.
 - One commit per item, authored as alewman, with the Co-Authored-By line the
-  session gives you. **Publishing is authorised (Aubrey, 2026-09-18):** work
-  on a branch `polish-0.4.0`, push it, open one PR, wait for CI and the
-  Oracles workflow (`gh workflow run oracles.yml` on the branch) to go green,
-  merge, then tag and release as item 7 says. The repository is public.
+  session gives you. **Pushing and merging are authorised (Aubrey,
+  2026-09-18); tagging and publishing are not.** Work on a branch
+  `polish-0.4.0`, push it, open one PR, wait for CI and the Oracles workflow
+  (`gh workflow run oracles.yml` on the branch) to go green, merge, and stop
+  there. The `v0.4.0` tag, the GitHub release and the PyPI upload happen
+  after Aubrey's reviewer has read the merged result; item 7 prepares them.
+  The repository is public.
 - Never commit vectors, ZEX binaries, z80test data, ROMs.
 
 ## Item 1 — enforce formatting, fix the small things (an hour)
@@ -273,7 +276,7 @@ m6800-python's debugger grew past z80-python's. Back-port:
 - `console.py`: add `watch`/`unwatch`/`over` if missing, matching the m6800
   command set so the two debuggers read the same.
 
-## Item 7 — release 0.4.0 (half a day)
+## Item 7 — prepare the 0.4.0 release, stop before the tag (half a day)
 
 - `CHANGELOG.md`: move `[Unreleased]` to `[0.4.0] — <date>`, listing items
   1-6 with the speed ladder's before/after numbers, and a **Breaking**
@@ -284,22 +287,28 @@ m6800-python's debugger grew past z80-python's. Back-port:
 - `docs/validation.md`: recertify. Record the SST, z80test, FUSE, cross-check
   and ZEX runs against the final hash, with commands and timings, exactly as
   the page does for 0.3.0.
-- **Publish.** There is no PyPI workflow in the tree and no `~/.pypirc`;
-  0.3.0 was uploaded by hand. Add `.github/workflows/publish.yml`: on a
-  pushed `v*` tag, build sdist and wheel, run the installed-API smoke test,
-  then upload with `pypa/gh-action-pypi-publish` using **Trusted Publishing**
-  (OIDC, no stored token). Trusted Publishing needs a one-time registration
-  on pypi.org (project `z80-python` → Publishing → add publisher: owner
+- **Publish workflow, not the publish.** There is no PyPI workflow in the
+  tree and no `~/.pypirc`; 0.3.0 was uploaded by hand. Add
+  `.github/workflows/publish.yml`: on a pushed `v*` tag (excluding `-rc`
+  tags), build sdist and wheel, run the installed-API smoke test, then upload
+  with `pypa/gh-action-pypi-publish` using **Trusted Publishing** (OIDC, no
+  stored token). Trusted Publishing needs a one-time registration on
+  pypi.org (project `z80-python` → Publishing → add publisher: owner
   `alewman`, repository `z80-python`, workflow `publish.yml`, environment
-  `pypi`). **Aubrey registered it on 2026-09-18**, so the upload should
-  authenticate first time. Order: merge the PR; push `v0.4.0`
-  (`git tag -a v0.4.0 -m ...; git push origin v0.4.0`); create the GitHub
-  release from `docs/releases/0.4.0.md` with `gh release create`. If the
-  publish job fails on PyPI authentication, stop, do not retry with a token,
-  and report the exact registration Aubrey must do; the GitHub release and
-  tag stand either way. After a successful upload, `pip install z80-python==0.4.0`
-  in a fresh venv and run the smoke test; record the result in the release
-  note.
+  `pypi`). **Aubrey registered it on 2026-09-18.** Prove the workflow
+  without a tag: give it `workflow_dispatch` as a second trigger with a
+  `dry_run` input that builds, smoke-tests and runs `twine check` but skips
+  the upload step, and run that once on the branch so the PR shows it green.
+- **Stop before the tag.** Do not run `git tag`, `gh release create`, or any
+  upload. The merged main is the deliverable. Note that `v0.4.0-rc1` already
+  names the pre-polish state (dadff4d); leave it alone. In the final report,
+  give Aubrey the exact commands to run after review, filled in with the
+  merged hash:
+  `git tag -a v0.4.0 <hash> -m "..."; git push origin v0.4.0;
+  gh release create v0.4.0 --notes-file docs/releases/0.4.0.md`,
+  and what to check afterwards: the publish job green, then
+  `pip install z80-python==0.4.0` in a fresh venv plus the smoke test,
+  whose result goes into the release note as a follow-up commit.
 
 ## Stretch 8 — IM 0 beyond RST
 
@@ -349,6 +358,7 @@ certify against ZEXALL in parallel without rediscovering the recipe.
 - README claims name their oracle tier in the sentence that makes them.
 - The debugger, CLI and trace schema match m6800-python's, so the next core
   can copy either.
-- `v0.4.0` merged, tagged, released on GitHub, and on PyPI (or, if PyPI
-  authentication blocked it, the exact one-time registration Aubrey must do
-  is in the final report).
+- The `polish-0.4.0` PR merged to main with CI and Oracles green, the
+  publish workflow proven by a dry run, and **no tag pushed**. The final
+  report ends with the tag, release and verification commands for Aubrey to
+  run once the reviewer has read the merged result.
