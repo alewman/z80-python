@@ -8,6 +8,29 @@ copies from, so the goal is not "good enough" but "the shape the others
 should inherit". Do the items in order. Items 1-7 are the job; 8-9 are
 stretch goals, only after 1-7 are green.
 
+## The bar
+
+Aubrey's word for the target is **defensible**: z80-python is the pinnacle
+core of the family, the one every other pure-Python core will be measured
+against, and it should represent the best a human-and-AI pair can do. Read
+every item below against that bar, which means:
+
+- every claim names its oracle and the oracle's tier in the sentence that
+  makes it, and a reader can rerun the command that produced it;
+- every handler says where its rule comes from, so a disagreement can be
+  settled by opening the cited page, not by trusting the code;
+- every deliberate divergence from an oracle is listed with the
+  higher-tier source that decided it, and there are no undocumented ones;
+- every number in the docs (tests, cases, speed, timings) is current and
+  regenerated, not remembered;
+- nothing is kept that does not pay: a rung, a test file, a page or a
+  marker that does not move a number or settle a question is removed.
+
+When an item as written falls short of that bar, do the better thing and say
+so in the commit message; when meeting the bar would exceed the item's
+scope, finish the item and record the gap in `CHANGELOG.md` under
+`[Unreleased]` so it is not lost.
+
 ## Context you are inheriting
 
 - Repository: `/data/emu/z80-python`, public as `alewman/z80-python`, HEAD
