@@ -4,6 +4,8 @@ Base-set instructions that a DD/FD prefix merely decorates live with their own
 instruction group; ``_index_dispatch.py`` routes them and adds the prefix cost.
 """
 
+from z80_python._core import _signed8
+
 
 class IndexMixin:
     """Private IX/IY helper and instruction implementation."""
@@ -284,18 +286,13 @@ class IndexMixin:
         return 10
 
     def _index_displacement_addr(self, prefix: int) -> int:
-        displacement = self._read_operand_byte()
-        if displacement >= 0x80:
-            displacement -= 0x100
-        addr = (self._get_index(prefix) + displacement) & 0xFFFF
+        addr = (self._get_index(prefix) + _signed8(self._read_operand_byte())) & 0xFFFF
         self.wz = addr
         return addr
 
     def _op_index_bit(self, prefix: int, displacement: int, sub_opcode: int) -> int:
         """BIT b,(IX+d)/(IY+d)"""
-        if displacement >= 0x80:
-            displacement -= 0x100
-        self.wz = (self._get_index(prefix) + displacement) & 0xFFFF
+        self.wz = (self._get_index(prefix) + _signed8(displacement)) & 0xFFFF
         value = self.read_byte(self.wz)
         bit_index = (sub_opcode >> 3) & 0x07
         bit_set = (value >> bit_index) & 1
@@ -310,9 +307,7 @@ class IndexMixin:
 
     def _op_index_rot(self, prefix: int, displacement: int, sub_opcode: int) -> int:
         """RLC/RRC/RL/RR/SLA/SRA/SLL/SRL (IX+d)/(IY+d) -- undocumented forms also copy into r."""
-        if displacement >= 0x80:
-            displacement -= 0x100
-        self.wz = (self._get_index(prefix) + displacement) & 0xFFFF
+        self.wz = (self._get_index(prefix) + _signed8(displacement)) & 0xFFFF
         value = self._rot_apply((sub_opcode >> 3) & 0x07, self.read_byte(self.wz))
         self.write_byte(self.wz, value)
         dest = sub_opcode & 0x07
@@ -325,9 +320,7 @@ class IndexMixin:
         self, prefix: int, displacement: int, sub_opcode: int, *, set_bit: bool
     ) -> int:
         """RES/SET b,(IX+d)/(IY+d) -- the undocumented forms also copy the result into r."""
-        if displacement >= 0x80:
-            displacement -= 0x100
-        self.wz = (self._get_index(prefix) + displacement) & 0xFFFF
+        self.wz = (self._get_index(prefix) + _signed8(displacement)) & 0xFFFF
         mask = 1 << ((sub_opcode >> 3) & 0x07)
         value = self.read_byte(self.wz)
         value = value | mask if set_bit else value & ~mask

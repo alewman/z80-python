@@ -108,9 +108,7 @@ class Z80TestRunner:
         code, load_addr = _parse_tap_code_block(tap_bytes)
         self.cpu = _SpectrumHostCPU()
         self.cpu.memory[load_addr : load_addr + len(code)] = code
-        self.cpu.memory[_RST10_ADDRESS : _RST10_ADDRESS + len(_LOAD_STUB_RST10)] = (
-            _LOAD_STUB_RST10
-        )
+        self.cpu.memory[_RST10_ADDRESS : _RST10_ADDRESS + len(_LOAD_STUB_RST10)] = _LOAD_STUB_RST10
         self.cpu.memory[_CHANOPEN_ADDRESS : _CHANOPEN_ADDRESS + len(_LOAD_STUB_CHANOPEN)] = (
             _LOAD_STUB_CHANOPEN
         )

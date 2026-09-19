@@ -56,7 +56,7 @@ def test_byte_sequence_reports_truncation() -> None:
 
 def _supported_by_cpu(encoded: Iterable[int]) -> bool:
     cpu = MinimalZ80Host()
-    cpu.memory[0x1000 : 0x1008] = bytes(encoded)
+    cpu.memory[0x1000:0x1008] = bytes(encoded)
     cpu.pc = 0x1000
     cpu.sp = 0x8000
     try:

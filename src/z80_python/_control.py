@@ -1,5 +1,7 @@
 """Jump, call, return, restart, exchange, and CPU-control (NOP/HALT/DI/EI/IM) group."""
 
+from z80_python._core import _signed8
+
 
 class ControlMixin:
     """Private control-flow, exchange, and CPU-control implementation."""
@@ -23,9 +25,7 @@ class ControlMixin:
 
     def _op_jr(self, opcode: int) -> int:
         """JR cc,e -- relative jump; JR e is the always-taken form. 12 T-states taken, 7 not."""
-        displacement = self._read_operand_byte()
-        if displacement >= 0x80:
-            displacement -= 0x100
+        displacement = _signed8(self._read_operand_byte())
         if opcode == 0x18:
             taken = True
         elif opcode == 0x20:
@@ -188,9 +188,7 @@ class ControlMixin:
 
     def _op_djnz(self) -> int:
         """DJNZ e -- decrement B and branch if it is not zero; 13 T-states taken, 8 not."""
-        displacement = self._read_operand_byte()
-        if displacement >= 0x80:
-            displacement -= 0x100
+        displacement = _signed8(self._read_operand_byte())
         self.b = (self.b - 1) & 0xFF
         if self.b:
             self.wz = (self.pc + displacement) & 0xFFFF

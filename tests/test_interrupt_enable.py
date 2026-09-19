@@ -51,4 +51,4 @@ def test_interrupt_enable_forms_update_both_flip_flops(
         0xBEEF,
         enabled,
         enabled,
-    )  # noqa: W292
+    )

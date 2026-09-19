@@ -54,7 +54,6 @@ def test_ed_store_pair_at_absolute_address(opcode: int, pair: str) -> None:
     assert (cpu.pc, cpu.r, int(cpu.f), cpu.q, cpu.wz) == (0x2004, 0x40, 0xC5, 0, 0)
 
 
-
 @pytest.mark.parametrize(
     ("opcode", "pair"),
     ((0x4B, "bc"), (0x5B, "de"), (0x6B, "hl"), (0x7B, "sp")),
@@ -69,4 +68,4 @@ def test_ed_load_pair_from_absolute_address(opcode: int, pair: str) -> None:
     assert _run(cpu, bytes([0xED, opcode, 0xFF, 0xFF])) == 20
 
     assert cpu._read_pair((opcode >> 4) & 0x03) == 0xA65A
-    assert (cpu.pc, cpu.r, int(cpu.f), cpu.q, cpu.wz) == (0x2004, 0x40, 0xC5, 0, 0)  # noqa: W292
+    assert (cpu.pc, cpu.r, int(cpu.f), cpu.q, cpu.wz) == (0x2004, 0x40, 0xC5, 0, 0)

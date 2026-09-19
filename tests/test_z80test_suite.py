@@ -22,7 +22,6 @@ _Z80TEST_DIR = Path(__file__).resolve().parents[1] / "validation" / "z80test_dat
 
 
 @pytest.mark.slow
-@pytest.mark.integration
 @pytest.mark.parametrize("program_name", ("z80memptr.tap", "z80full.tap", "z80ccf.tap"))
 def test_z80test_program_reports_all_tests_passed(program_name: str) -> None:
     """Each hardware-derived z80test program must report its own clean sweep."""

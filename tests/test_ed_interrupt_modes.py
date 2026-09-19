@@ -57,4 +57,4 @@ def test_ed_interrupt_mode_aliases_select_mode_without_other_changes(
         0,
         0xBEEF,
         mode,
-    )  # noqa: W292
+    )

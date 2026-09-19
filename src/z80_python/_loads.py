@@ -84,7 +84,7 @@ class LoadMixin:
         return 9
 
     def _op_ld_a_i(self) -> int:
-        """LD A,I -- the only load that sets flags; PV mirrors IFF2."""
+        """LD A,I -- one of the two loads that set flags (LD A,R is the other); PV mirrors IFF2."""
         value = self.i
         self.a = value
         self.f.n = self.f.h = 0
@@ -97,7 +97,7 @@ class LoadMixin:
         return 9
 
     def _op_ld_a_r(self) -> int:
-        """LD A,R -- the only load that sets flags; PV mirrors IFF2."""
+        """LD A,R -- one of the two loads that set flags (LD A,I is the other); PV mirrors IFF2."""
         value = self.r
         self.a = value
         self.f.n = self.f.h = 0

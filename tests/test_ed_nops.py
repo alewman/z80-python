@@ -43,4 +43,4 @@ def test_undocumented_ed_nops_change_only_execution_bookkeeping(opcode: int) -> 
         0xC5,
         0,
         0xBEEF,
-    )  # noqa: W292
+    )

@@ -49,4 +49,4 @@ def test_ed_neg_aliases_share_subtraction_flags(
         expected_f,
         expected_f,
         0xBEEF,
-    )  # noqa: W292
+    )
