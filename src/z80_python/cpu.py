@@ -179,7 +179,7 @@ class Z80CPU(
         delay_was_active = self._ei_delay > 0
         if self.halted:
             self._inc_r()
-            self._update_q(False)
+            self.q = 0
             t_states = 4
         else:
             t_states = self.decode_and_execute()

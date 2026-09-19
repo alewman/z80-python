@@ -78,10 +78,10 @@ class RotateBitMixin:
         if dest == 6:
             addr = self._hl()
             self.write_byte(addr, self._rot_apply(group, self.read_byte(addr)))
-            self._update_q(True)
+            self.q = self._f
             return 15
         self._write_reg(dest, self._rot_apply(group, self._read_reg(dest)))
-        self._update_q(True)
+        self.q = self._f
         return 8
 
     def _op_rlca(self) -> int:
@@ -89,7 +89,7 @@ class RotateBitMixin:
         self.a = ((self.a << 1) | (self.a >> 7)) & 0xFF
         # The accumulator rotates keep S, Z and PV; C is the bit rotated out.
         self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & (FLAG_XY | FLAG_C))
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_rrca(self) -> int:
@@ -97,7 +97,7 @@ class RotateBitMixin:
         carry = self.a & 1
         self.a = ((self.a >> 1) | (self.a << 7)) & 0xFF
         self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & FLAG_XY) | carry
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_rla(self) -> int:
@@ -105,7 +105,7 @@ class RotateBitMixin:
         carry = self.a >> 7
         self.a = ((self.a << 1) | (self._f & FLAG_C)) & 0xFF
         self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & FLAG_XY) | carry
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_rra(self) -> int:
@@ -113,7 +113,7 @@ class RotateBitMixin:
         carry = self.a & 1
         self.a = (self.a >> 1) | ((self._f & FLAG_C) << 7)
         self._f = (self._f & (FLAG_S | FLAG_Z | FLAG_PV)) | (self.a & FLAG_XY) | carry
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_bit(self, sub_opcode: int) -> int:
@@ -131,7 +131,7 @@ class RotateBitMixin:
             xy_source = value
             t_states = 8
         self._f = _bit_flags(self._f, value, bit_index, xy_source)
-        self._update_q(True)
+        self.q = self._f
         return t_states
 
     def _op_res(self, sub_opcode: int) -> int:
@@ -146,7 +146,7 @@ class RotateBitMixin:
         else:
             self._write_reg(dest, self._read_reg(dest) & mask)
             t_states = 8
-        self._update_q(False)
+        self.q = 0
         return t_states
 
     def _op_set(self, sub_opcode: int) -> int:
@@ -161,7 +161,7 @@ class RotateBitMixin:
         else:
             self._write_reg(dest, self._read_reg(dest) | mask)
             t_states = 8
-        self._update_q(False)
+        self.q = 0
         return t_states
 
     def _op_rrd(self) -> int:
@@ -172,7 +172,7 @@ class RotateBitMixin:
         self.write_byte(addr, ((data >> 4) | (self.a << 4)) & 0xFF)
         self.a = (self.a & 0xF0) | (data & 0x0F)
         self._f = (self._f & FLAG_C) | SZXYP[self.a]
-        self._update_q(True)
+        self.q = self._f
         return 18
 
     def _op_rld(self) -> int:
@@ -183,5 +183,5 @@ class RotateBitMixin:
         self.write_byte(addr, ((data << 4) | (self.a & 0x0F)) & 0xFF)
         self.a = (self.a & 0xF0) | (data >> 4)
         self._f = (self._f & FLAG_C) | SZXYP[self.a]
-        self._update_q(True)
+        self.q = self._f
         return 18

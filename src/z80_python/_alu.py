@@ -108,19 +108,19 @@ class ALUMixin:
             value = self._read_reg(src)
             t_states = 4
         self._alu_a(group, value)
-        self._update_q(True)
+        self.q = self._f
         return t_states
 
     def _op_alu_n(self, opcode: int) -> int:
         """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,n -- 8-bit ALU with an immediate operand."""
         self._alu_a((opcode >> 3) & 0x07, self._read_operand_byte())
-        self._update_q(True)
+        self.q = self._f
         return 7
 
     def _op_neg(self) -> int:
         """NEG -- replace A with its two's-complement negation."""
         self.a = self._sub(0, self.a, 0)
-        self._update_q(True)
+        self.q = self._f
         return 8
 
     def _alu_a(self, group: int, value: int) -> None:
@@ -145,28 +145,28 @@ class ALUMixin:
         """INC r"""
         dest = (opcode >> 3) & 0x07
         self._write_reg(dest, self._inc(self._read_reg(dest)))
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_dec_r(self, opcode: int) -> int:
         """DEC r"""
         dest = (opcode >> 3) & 0x07
         self._write_reg(dest, self._dec(self._read_reg(dest)))
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_inc_hl(self) -> int:
         """INC (HL)"""
         addr = self._hl()
         self.write_byte(addr, self._inc(self.read_byte(addr)))
-        self._update_q(True)
+        self.q = self._f
         return 11
 
     def _op_dec_hl(self) -> int:
         """DEC (HL)"""
         addr = self._hl()
         self.write_byte(addr, self._dec(self.read_byte(addr)))
-        self._update_q(True)
+        self.q = self._f
         return 11
 
     def _op_daa(self) -> int:
@@ -184,7 +184,7 @@ class ALUMixin:
             a = (a + (-0x06 if f & FLAG_N else 0x06)) & 0xFF
         self.a = a
         self._f = SZXYP[a] | ((a ^ original) & FLAG_H) | (f & FLAG_N) | carry
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_cpl(self) -> int:
@@ -193,7 +193,7 @@ class ALUMixin:
         self._f = (
             (self._f & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | FLAG_H | FLAG_N | (self.a & FLAG_XY)
         )
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _op_scf_ccf(self, opcode: int) -> int:
@@ -211,7 +211,7 @@ class ALUMixin:
         else:
             carry_and_h = FLAG_C
         self._f = (f & (FLAG_S | FLAG_Z | FLAG_PV)) | xy | carry_and_h
-        self._update_q(True)
+        self.q = self._f
         return 4
 
     def _add16(self, x: int, y: int, carry: int) -> int:
@@ -257,7 +257,7 @@ class ALUMixin:
             | (z >> 16)
         )
         self._write_pair(2, result)
-        self._update_q(True)
+        self.q = self._f
         return 11
 
     def _op_adc_hl_rr(self, opcode: int) -> int:
@@ -267,7 +267,7 @@ class ALUMixin:
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
         self._write_pair(2, self._add16(hl, self._read_pair(pair_index), self._f & FLAG_C))
-        self._update_q(True)
+        self.q = self._f
         return 15
 
     def _op_sbc_hl_rr(self, opcode: int) -> int:
@@ -277,19 +277,19 @@ class ALUMixin:
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
         self._write_pair(2, self._sub16(hl, self._read_pair(pair_index), self._f & FLAG_C))
-        self._update_q(True)
+        self.q = self._f
         return 15
 
     def _op_inc_rr(self, opcode: int) -> int:
         """INC rr -- no flags."""
         pair_index = (opcode >> 4) & 0x03
         self._write_pair(pair_index, (self._read_pair(pair_index) + 1) & 0xFFFF)
-        self._update_q(False)
+        self.q = 0
         return 6
 
     def _op_dec_rr(self, opcode: int) -> int:
         """DEC rr -- no flags."""
         pair_index = (opcode >> 4) & 0x03
         self._write_pair(pair_index, (self._read_pair(pair_index) - 1) & 0xFFFF)
-        self._update_q(False)
+        self.q = 0
         return 6

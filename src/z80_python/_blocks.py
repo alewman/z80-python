@@ -69,25 +69,25 @@ class BlockMixin:
     def _op_ldi(self) -> int:
         """LDI -- (DE) <- (HL); HL++, DE++, BC--."""
         self._block_ld(True)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_ldd(self) -> int:
         """LDD -- (DE) <- (HL); HL--, DE--, BC--."""
         self._block_ld(False)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_cpi(self) -> int:
         """CPI -- compare A with (HL); HL++, BC--."""
         self._block_cp(True)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_cpd(self) -> int:
         """CPD -- compare A with (HL); HL--, BC--."""
         self._block_cp(False)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_ldir(self) -> int:
@@ -95,7 +95,7 @@ class BlockMixin:
         repeat = self._block_ld(True)
         if repeat:
             self._block_repeat()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
 
     def _op_lddr(self) -> int:
@@ -103,7 +103,7 @@ class BlockMixin:
         repeat = self._block_ld(False)
         if repeat:
             self._block_repeat()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
 
     def _op_cpir(self) -> int:
@@ -111,7 +111,7 @@ class BlockMixin:
         repeat = self._block_cp(True)
         if repeat:
             self._block_repeat()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
 
     def _op_cpdr(self) -> int:
@@ -119,5 +119,5 @@ class BlockMixin:
         repeat = self._block_cp(False)
         if repeat:
             self._block_repeat()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
