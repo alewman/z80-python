@@ -66,7 +66,11 @@ cited line by line, and honest about the tier of every claim.
   memory accesses has no hardware-captured oracle at all, so the bus claim
   is now "checked against emulator-derived pin traces", not "certified";
   which T-state each access occupies is not claimed.
-- CI enforces `ruff format --check` and runs the FUSE oracle on every push;
+- Certified at `b1720b6` on CPython 3.14 and PyPy 3.11: SingleStepTests,
+  z80test, ZEXDOC/ZEXALL, FUSE and the interrupt cross-check, with commands
+  and timings in docs/validation.md.
+- CI enforces `ruff format --check` (ruff pinned) and runs the FUSE oracle
+  on every push;
   a scheduled workflow runs the SingleStepTests, z80test and FUSE gates. See
   [CI coverage](README.md#ci-coverage).
 
