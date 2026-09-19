@@ -13,7 +13,11 @@ The supported surface includes:
   constants;
 - `CPUState` capture and restoration;
 - `Instruction` and disassembly functions;
-- `DebugSession`, its protocols, enums, and immutable result values;
+- `DebugSession`, its protocols, enums, and immutable result values, including
+  access tracking (`track_accesses=`, `StepRecord.accesses`, `Access`),
+  watchpoints (`add_watchpoint`, `StopReason.WATCHPOINT`, `RunResult.hits`) and
+  `next_boundary`;
+- the `python -m z80_python` command line and `console.parse_number`;
 - `z80_python.conformance`: `Manifest` and its parts, `ConformanceHost`,
   `trace_manifest`, `diff_manifest`, the manifest JSON form, and the command line;
 - `CommandDebugger` and command result/error values; and

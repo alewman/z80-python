@@ -60,6 +60,17 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ### Added
 
+- **Debugger parity with m6800-python.** `DebugSession(track_accesses=True)`
+  records every bus access a step makes, memory and I/O, in
+  `StepRecord.accesses`, by wrapping the CPU's bus callables; `close()`
+  restores them. `add_watchpoint(address, "r" | "w" | "rw")` stops a run
+  after the step that touched the byte (`StopReason.WATCHPOINT`,
+  `RunResult.hits`). `next_boundary(state)` is public. The console gains
+  `over`, `continue`, `watch`/`unwatch`, `set`, `int`/`nmi`/`reset` and the
+  one-letter aliases; numbers stay decimal (`$1234` is new hex shorthand).
+  `python -m z80_python --load FILE@ADDR --pc ADDR -c ...` steps a binary
+  without a host. The trace schema gains an optional `accesses` array and
+  stays version 1.
 - **Every opcode handler cites its source.** Each docstring headline ends
   with the page of Zilog's *Z80 CPU User Manual* UM008011-0816 or the section
   of Young's *Undocumented Z80 Documented* v0.91 its rule comes from, and every

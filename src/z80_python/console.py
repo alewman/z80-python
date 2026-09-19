@@ -1,10 +1,16 @@
-"""Portable command debugger built as a thin frontend over DebugSession."""
+"""Portable command debugger built as a thin frontend over DebugSession.
+
+``CommandDebugger.execute(line)`` runs one command and returns printable lines;
+``interact(input, output)`` is a line-oriented loop with no terminal
+dependencies. ``python -m z80_python`` starts one on a binary. The command set
+matches m6800-python's, with Z80 registers and interrupt inputs.
+"""
 
 import shlex
 from dataclasses import dataclass
 from typing import TextIO
 
-from z80_python.debug import DebugSession, RunResult, StepRecord
+from z80_python.debug import DebugSession, RunResult, StepRecord, StopReason
 from z80_python.disasm import ByteReader, Instruction, disassemble
 from z80_python.state import CPUState
 
@@ -28,29 +34,64 @@ class CommandResult:
 
 
 _HELP = (
-    "help                         Show this command summary",
-    "registers | regs             Show CPU registers and lifecycle state",
-    "step [COUNT]                 Execute one or more boundaries",
+    "help | ?                     Show this command summary",
+    "registers | regs | r         Show CPU registers and lifecycle state",
+    "step [COUNT] | s             Execute one or more boundaries (ignores breakpoints)",
+    "over | o                     Step, running a CALL or RST through to its return",
     "run STEPS [T_STATES]         Run with finite step and optional timing limits",
-    "break ADDRESS                Add an execute breakpoint",
+    "continue | c                 Run up to 1,000,000 steps, off a breakpoint if on one",
+    "break ADDRESS | b            Add an execute breakpoint",
     "delete ADDRESS               Remove an execute breakpoint",
-    "breakpoints                  List execute breakpoints",
-    "disassemble [ADDRESS] [COUNT] Decode instructions without side effects",
-    "memory ADDRESS [LENGTH]      Display up to 256 bytes",
+    "breakpoints                  List breakpoints and watchpoints",
+    "watch ADDRESS [r|w|rw]       Stop after a step that touches the byte at ADDRESS",
+    "unwatch ADDRESS              Remove a watchpoint",
+    "disassemble [ADDRESS] [COUNT] | d  Decode instructions without side effects",
+    "memory ADDRESS [LENGTH] | m  Display up to 256 bytes",
     "history [COUNT]              Show retained step records",
-    "quit | exit                  Leave the command loop",
+    "set REGISTER VALUE           Set A F B C D E H L AF BC DE HL IX IY SP PC I R",
+    "int VECTOR | int off         Request (or withdraw) a maskable interrupt",
+    "nmi | reset                  Request an NMI, or pulse RESET for one step",
+    "quit | exit | q              Leave the command loop",
+    "Numbers are decimal; 0x1234 or $1234 is hexadecimal.",
 )
+
+#: Registers ``set`` accepts, with their widths.
+_REGISTERS = {
+    "A": 0xFF,
+    "F": 0xFF,
+    "B": 0xFF,
+    "C": 0xFF,
+    "D": 0xFF,
+    "E": 0xFF,
+    "H": 0xFF,
+    "L": 0xFF,
+    "I": 0xFF,
+    "R": 0xFF,
+    "AF": 0xFFFF,
+    "BC": 0xFFFF,
+    "DE": 0xFFFF,
+    "HL": 0xFFFF,
+    "IX": 0xFFFF,
+    "IY": 0xFFFF,
+    "SP": 0xFFFF,
+    "PC": 0xFFFF,
+}
 
 
 def _number(text: str, name: str, *, maximum: int | None = None) -> int:
     try:
-        value = int(text, 0)
+        value = int(text[1:], 16) if text.startswith("$") else int(text, 0)
     except ValueError as exc:
         raise CommandError(f"{name} must be an integer") from exc
     if value < 0 or (maximum is not None and value > maximum):
         suffix = f" in range 0..{maximum}" if maximum is not None else " non-negative"
         raise CommandError(f"{name} must be{suffix}")
     return value
+
+
+def parse_number(text: str, name: str = "value", *, maximum: int | None = None) -> int:
+    """Parse a debugger number: decimal, or hexadecimal written ``0x1234`` or ``$1234``."""
+    return _number(text, name, maximum=maximum)
 
 
 def _positive(text: str, name: str, *, maximum: int | None = None) -> int:
@@ -96,10 +137,28 @@ def _format_record(record: StepRecord) -> str:
 
 
 def _format_run(result: RunResult) -> str:
-    return (
+    line = (
         f"stopped={result.reason.value} steps={result.steps} "
         f"instructions={result.instructions} t_states={result.t_states} PC={result.state.pc:04X}"
     )
+    if result.reason is StopReason.WATCHPOINT:
+        line += " " + " ".join(
+            f"{kind} {address:04X}={value:02X}" for kind, address, value in result.hits
+        )
+    return line
+
+
+_ALIASES = {
+    "?": "help",
+    "r": "registers",
+    "s": "step",
+    "o": "over",
+    "c": "continue",
+    "b": "break",
+    "d": "disassemble",
+    "m": "memory",
+    "q": "quit",
+}
 
 
 class CommandDebugger:
@@ -123,7 +182,7 @@ class CommandDebugger:
             return CommandResult()
 
         name, *arguments = words
-        name = name.lower()
+        name = _ALIASES.get(name.lower(), name.lower())
         if name in ("quit", "exit"):
             self._arity(name, arguments, 0)
             return CommandResult(quit=True)
@@ -135,8 +194,42 @@ class CommandDebugger:
             return CommandResult(_format_state(self.session.target.capture_state()))
         if name == "step":
             return self._step(arguments)
+        if name == "over":
+            return self._over(arguments)
         if name == "run":
             return self._run(arguments)
+        if name == "continue":
+            return self._continue(arguments)
+        if name == "watch":
+            self._arity(name, arguments, 1, 2)
+            address = _number(arguments[0], "address", maximum=0xFFFF)
+            kind = arguments[1].lower() if len(arguments) == 2 else "rw"
+            try:
+                self.session.add_watchpoint(address, kind)
+            except ValueError as exc:
+                raise CommandError(str(exc)) from exc
+            return CommandResult((f"watchpoint added at {address:04X} ({kind})",))
+        if name == "unwatch":
+            self._arity(name, arguments, 1)
+            address = _number(arguments[0], "address", maximum=0xFFFF)
+            self.session.remove_watchpoint(address)
+            return CommandResult((f"watchpoint removed from {address:04X}",))
+        if name == "set":
+            return self._set(arguments)
+        if name == "int":
+            return self._interrupt(arguments)
+        if name == "nmi":
+            self._arity(name, arguments, 0)
+            self.session.cpu.request_non_maskable_interrupt()
+            return CommandResult(("NMI requested; accepted at the next step",))
+        if name == "reset":
+            self._arity(name, arguments, 0)
+            self.session.cpu.request_reset()
+            record = self.session.step()
+            self.session.cpu.clear_reset()
+            return CommandResult(
+                (_format_record(record), *_format_state(self.session.target.capture_state()))
+            )
         if name == "break":
             self._arity(name, arguments, 1)
             address = _number(arguments[0], "address", maximum=0xFFFF)
@@ -150,6 +243,10 @@ class CommandDebugger:
         if name == "breakpoints":
             self._arity(name, arguments, 0)
             lines = tuple(f"{address:04X}" for address in sorted(self.session.breakpoints))
+            lines += tuple(
+                f"watch {address:04X} {kind}"
+                for address, kind in sorted(self.session.watchpoints.items())
+            )
             return CommandResult(lines or ("no breakpoints",))
         if name in ("disassemble", "disasm"):
             return self._disassemble(arguments)
@@ -189,6 +286,67 @@ class CommandDebugger:
         count = _positive(arguments[0], "count", maximum=10_000) if arguments else 1
         records = tuple(self.session.step() for _ in range(count))
         return CommandResult(tuple(_format_record(record) for record in records))
+
+    def _over(self, arguments: list[str]) -> CommandResult:
+        self._arity("over", arguments, 0)
+        state = self.session.target.capture_state()
+        instruction = disassemble(self._require_peek(), state.pc)
+        if instruction.mnemonic not in ("CALL", "RST"):
+            return self._step([])
+        # Run the call through: stop when control is back at the instruction
+        # after it with the stack where it was (a CALL cc not taken gets there
+        # in one step).
+        lines = [_format_record(self.session.step())]
+        for _ in range(1_000_000):
+            now = self.session.target.capture_state()
+            if now.pc == instruction.next_address and now.sp == state.sp:
+                break
+            if now.pc in self.session.breakpoints:
+                lines.append(f"breakpoint at {now.pc:04X}")
+                break
+            result = self.session.run(max_steps=1, stop_on_halt=False)
+            if result.reason is not StopReason.STEP_LIMIT:
+                lines.append(_format_run(result))
+                break
+        else:
+            lines.append("gave up after 1,000,000 steps")
+        return CommandResult((*lines, *_format_state(self.session.target.capture_state())))
+
+    def _continue(self, arguments: list[str]) -> CommandResult:
+        self._arity("continue", arguments, 0)
+        steps = 1_000_000
+        lines = []
+        # run() stops before a breakpoint without moving, so step off one first.
+        if self.session.target.capture_state().pc in self.session.breakpoints:
+            lines.append(_format_record(self.session.step()))
+            steps -= 1
+        lines.append(_format_run(self.session.run(max_steps=steps)))
+        return CommandResult(tuple(lines))
+
+    def _set(self, arguments: list[str]) -> CommandResult:
+        self._arity("set", arguments, 2)
+        register = arguments[0].upper()
+        if register not in _REGISTERS:
+            raise CommandError(f"no register {register}; set takes {' '.join(_REGISTERS)}")
+        value = _number(arguments[1], register, maximum=_REGISTERS[register])
+        cpu = self.session.cpu
+        if register in ("AF", "BC", "DE", "HL"):
+            high, low = register
+            setattr(cpu, high.lower(), value >> 8)
+            setattr(cpu, low.lower(), value & 0xFF)
+        else:
+            setattr(cpu, register.lower(), value)
+        return CommandResult(_format_state(cpu.capture_state()))
+
+    def _interrupt(self, arguments: list[str]) -> CommandResult:
+        self._arity("int", arguments, 1)
+        cpu = self.session.cpu
+        if arguments[0].lower() == "off":
+            cpu.clear_maskable_interrupt()
+            return CommandResult(("maskable interrupt request withdrawn",))
+        vector = _number(arguments[0], "vector", maximum=0xFF)
+        cpu.request_maskable_interrupt(vector)
+        return CommandResult((f"maskable interrupt requested (vector {vector:02X})",))
 
     def _run(self, arguments: list[str]) -> CommandResult:
         self._arity("run", arguments, 1, 2)
@@ -253,4 +411,4 @@ class CommandDebugger:
             raise CommandError(f"{name} expects {expected} argument(s)")
 
 
-__all__ = ["CommandDebugger", "CommandError", "CommandResult"]
+__all__ = ["CommandDebugger", "CommandError", "CommandResult", "parse_number"]
