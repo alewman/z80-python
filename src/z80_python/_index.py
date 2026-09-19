@@ -77,13 +77,13 @@ class IndexMixin:
         """LD A,IXH/IYH"""
         self.a = self._index_high_byte(prefix)
         self._update_q(False)
-        return 4
+        return 8
 
     def _op_ld_a_index_l(self, prefix: int) -> int:
         """LD A,IXL/IYL"""
         self.a = self._index_low_byte(prefix)
         self._update_q(False)
-        return 4
+        return 8
 
     def _op_ld_r_index_byte(self, prefix: int, sub_opcode: int) -> int:
         """LD r,IXH/IXL/IYH/IYL"""
@@ -94,7 +94,7 @@ class IndexMixin:
         )
         self._write_reg((sub_opcode >> 3) & 0x07, value)
         self._update_q(False)
-        return 4
+        return 8
 
     def _op_ld_index_byte_index_byte(self, prefix: int, sub_opcode: int) -> int:
         """LD IXH/IXL,IXH/IXL (and the IY forms)"""
@@ -108,7 +108,7 @@ class IndexMixin:
         else:
             self._set_index_low_byte(prefix, value)
         self._update_q(False)
-        return 4
+        return 8
 
     def _op_ld_index_byte_r(self, prefix: int, sub_opcode: int) -> int:
         """LD IXH/IXL/IYH/IYL,r"""
@@ -118,7 +118,7 @@ class IndexMixin:
         else:
             self._set_index_low_byte(prefix, value)
         self._update_q(False)
-        return 4
+        return 8
 
     def _op_ld_index_byte_n(self, prefix: int, sub_opcode: int) -> int:
         """LD IXH/IXL/IYH/IYL,n"""
@@ -128,7 +128,7 @@ class IndexMixin:
         else:
             self._set_index_low_byte(prefix, value)
         self._update_q(False)
-        return 7
+        return 11
 
     def _op_inc_dec_index_byte(self, prefix: int, sub_opcode: int) -> int:
         """INC/DEC IXH/IXL/IYH/IYL"""
@@ -140,103 +140,103 @@ class IndexMixin:
         else:
             self._set_index_low_byte(prefix, result)
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_add_a_index_h(self, prefix: int) -> int:
         """ADD A,IXH/IYH"""
         self._alu_a(0, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_add_a_index_l(self, prefix: int) -> int:
         """ADD A,IXL/IYL"""
         self._alu_a(0, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_adc_a_index_h(self, prefix: int) -> int:
         """ADC A,IXH/IYH"""
         self._alu_a(1, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_adc_a_index_l(self, prefix: int) -> int:
         """ADC A,IXL/IYL"""
         self._alu_a(1, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_sub_a_index_h(self, prefix: int) -> int:
         """SUB A,IXH/IYH"""
         self._alu_a(2, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_sub_a_index_l(self, prefix: int) -> int:
         """SUB A,IXL/IYL"""
         self._alu_a(2, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_sbc_a_index_h(self, prefix: int) -> int:
         """SBC A,IXH/IYH"""
         self._alu_a(3, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_sbc_a_index_l(self, prefix: int) -> int:
         """SBC A,IXL/IYL"""
         self._alu_a(3, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_and_a_index_h(self, prefix: int) -> int:
         """AND A,IXH/IYH"""
         self._alu_a(4, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_and_a_index_l(self, prefix: int) -> int:
         """AND A,IXL/IYL"""
         self._alu_a(4, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_xor_a_index_h(self, prefix: int) -> int:
         """XOR A,IXH/IYH"""
         self._alu_a(5, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_xor_a_index_l(self, prefix: int) -> int:
         """XOR A,IXL/IYL"""
         self._alu_a(5, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_or_a_index_h(self, prefix: int) -> int:
         """OR A,IXH/IYH"""
         self._alu_a(6, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_or_a_index_l(self, prefix: int) -> int:
         """OR A,IXL/IYL"""
         self._alu_a(6, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_cp_a_index_h(self, prefix: int) -> int:
         """CP A,IXH/IYH"""
         self._alu_a(7, self._index_high_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_cp_a_index_l(self, prefix: int) -> int:
         """CP A,IXL/IYL"""
         self._alu_a(7, self._index_low_byte(prefix))
         self._update_q(True)
-        return 4
+        return 8
 
     def _op_inc_index(self, prefix: int) -> int:
         """INC IX/IY -- no flags."""
@@ -316,14 +316,12 @@ class IndexMixin:
         self._update_q(True)
         return 23
 
-    def _op_index_res_set(
-        self, prefix: int, displacement: int, sub_opcode: int, *, set_bit: bool
-    ) -> int:
+    def _op_index_res_set(self, prefix: int, displacement: int, sub_opcode: int) -> int:
         """RES/SET b,(IX+d)/(IY+d) -- the undocumented forms also copy the result into r."""
         self.wz = (self._get_index(prefix) + _signed8(displacement)) & 0xFFFF
         mask = 1 << ((sub_opcode >> 3) & 0x07)
         value = self.read_byte(self.wz)
-        value = value | mask if set_bit else value & ~mask
+        value = value | mask if sub_opcode & 0x40 else value & ~mask
         self.write_byte(self.wz, value)
         dest = sub_opcode & 0x07
         if dest != 6:

@@ -35,17 +35,17 @@ class LoadMixin:
         self._update_q(False)
         return t_states
 
-    def _op_ld_a_irr(self, reg16: int) -> int:
+    def _op_ld_a_irr(self, opcode: int) -> int:
         """LD A,(BC)/(DE)"""
-        self.wz = reg16
+        self.wz = self._bc() if opcode == 0x0A else self._de()
         self.a = self.read_byte(self.wz)
         self.wz = (self.wz + 1) & 0xFFFF
         self._update_q(False)
         return 7
 
-    def _op_ld_irr_a(self, reg16: int) -> int:
+    def _op_ld_irr_a(self, opcode: int) -> int:
         """LD (BC)/(DE),A"""
-        self.wz = reg16
+        self.wz = self._bc() if opcode == 0x02 else self._de()
         self.write_byte(self.wz, self.a)
         # After the write the address latch increments its low byte only, and its
         # high byte is overwritten by A (the data bus value): WZ = A:(addr+1)&FF.
