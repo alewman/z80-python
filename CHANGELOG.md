@@ -60,6 +60,16 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ### Added
 
+- **Every opcode handler cites its source.** Each docstring headline ends
+  with the page of Zilog's *Z80 CPU User Manual* UM008011-0816 or the section
+  of Young's *Undocumented Z80 Documented* v0.91 its rule comes from, and every
+  handler that uses WZ or reads Q names the SingleStepTests file (and, where
+  z80test covers the instruction, `z80memptr` or `z80ccf`) that pins the rule
+  neither manual describes. `tests/test_readability.py` enforces all three.
+  `scripts/fetch_reference_docs.py` fetches both manuals and checks their
+  SHA-256 pins; docs/validation.md lists the pins and the one rule where the
+  core departs from a cited manual (Young 4.1's `BIT b,r` X/Y, contradicted
+  by z80test's hardware-captured `z80full`).
 - `benchmarks/compare_revisions.py`, the same-process A/B the ladder was
   measured with.
 - **Memory bus transaction certification.** `VectorCPU` records every

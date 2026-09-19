@@ -274,7 +274,48 @@ one genuinely unconfirmed corner this surfaced: an opt-in, off-by-default
 NMOS erratum sourced from gate-level simulation rather than a hardware
 measurement.
 
-## Speed: the 0.4.0 ablation ladder
+## The sources every handler cites
+
+Every opcode handler's docstring ends its headline with the source of its rule,
+and `tests/test_readability.py` fails the build without one. The vocabulary:
+
+| Citation | Source | Tier |
+| --- | --- | --- |
+| `UM0080 p. 278` | Zilog, *Z80 CPU User Manual*, UM008011-0816 (August 2016), printed page | documentation |
+| `Young 3.4` | Sean Young, *The Undocumented Z80 Documented*, v0.91 (18 September 2005), section | documentation |
+| `z80full`, `z80ccf`, `z80memptr` | raxoft z80test 1.2a programs, CRCs captured from real Zilog NMOS silicon | hardware-captured |
+| `SST c3.json` | the SingleStepTests/z80 file for that opcode, at the pinned revision | emulator-derived |
+
+Neither manual describes WZ (MEMPTR) or Q, so every handler that uses WZ,
+itself or through a helper, carries a `WZ:` line naming the SingleStepTests
+file that pins its rule, and the one handler that reads Q (`SCF`/`CCF`) a `Q:`
+line; the readability test checks both. Where z80test exercises the
+instruction, the line also names `z80memptr` (WZ, observed through a following
+`BIT n,(HL)`) or `z80ccf` (Q), the hardware-captured evidence for the same
+rule. z80test has no `RST` test, so `RST`'s WZ rule rests on SingleStepTests
+alone.
+
+The two manuals are not redistributed. `scripts/fetch_reference_docs.py`
+downloads them into the gitignored `reference/` and checks these pins:
+
+| Document | SHA-256 |
+| --- | --- |
+| `um0080.pdf` (1,587,333 bytes) | `e3c83da5a5d8e372364c20fa53665e6fbb165ec6ac38c8c1eebc359603447b5e` |
+| `z80-documented.pdf` (276,007 bytes) | `6413048f39c2e735373b1fb23102599133bc64ccd0ed63b16fbc1173643d7a9d` |
+
+Every page citation was checked against the page's own heading, and every
+cited SingleStepTests file against the pinned corpus, when the citations were
+written (2026-09-18).
+
+**Where the core departs from a cited manual.** One rule, decided by a
+higher-tier source:
+
+- **`BIT b,r` X/Y.** Young 4.1 gives Y as "set if n = 5 and tested bit is set"
+  and X likewise for n = 3, i.e. copied from the tested bit. The core copies
+  bits 5 and 3 of the register itself, whatever b is. z80test's `z80full`
+  (hardware-captured; its `BIT N,[R,(HL)]` test compares every flag) agrees
+  with the core, as does SingleStepTests; Young's text is the outlier.
+
 
 0.4.0 made the core faster one change at a time, each change a commit that
 had to pass every oracle and to measure faster, or be reverted. Six rungs were

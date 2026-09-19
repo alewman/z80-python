@@ -67,31 +67,41 @@ class BlockMixin:
         self._f = (self._f & ~FLAG_XY) | ((self.pc >> 8) & FLAG_XY)
 
     def _op_ldi(self) -> int:
-        """LDI -- (DE) <- (HL); HL++, DE++, BC--."""
+        """LDI -- (DE) <- (HL); HL++, DE++, BC-- (UM0080 p. 130; Young 4.2)."""
         self._block_ld(True)
         self.q = self._f
         return 16
 
     def _op_ldd(self) -> int:
-        """LDD -- (DE) <- (HL); HL--, DE--, BC--."""
+        """LDD -- (DE) <- (HL); HL--, DE--, BC-- (UM0080 p. 134; Young 4.2)."""
         self._block_ld(False)
         self.q = self._f
         return 16
 
     def _op_cpi(self) -> int:
-        """CPI -- compare A with (HL); HL++, BC--."""
+        """CPI -- compare A with (HL); HL++, BC-- (UM0080 p. 138; Young 4.2).
+
+        WZ: z80memptr; SST ed a1.json.
+        """
         self._block_cp(True)
         self.q = self._f
         return 16
 
     def _op_cpd(self) -> int:
-        """CPD -- compare A with (HL); HL--, BC--."""
+        """CPD -- compare A with (HL); HL--, BC-- (UM0080 p. 141; Young 4.2).
+
+        WZ: z80memptr; SST ed a9.json.
+        """
         self._block_cp(False)
         self.q = self._f
         return 16
 
     def _op_ldir(self) -> int:
-        """LDIR -- LDI repeated while BC != 0; 21 T-states per repeat, 16 on the last."""
+        """LDIR -- LDI repeated while BC != 0; 21 T-states per repeat, 16 on the last (UM0080 p.
+        132; Young 4.2, 4.5).
+
+        WZ, and X/Y on a repeat: SST ed b0.json.
+        """
         repeat = self._block_ld(True)
         if repeat:
             self._block_repeat()
@@ -99,7 +109,11 @@ class BlockMixin:
         return 21 if repeat else 16
 
     def _op_lddr(self) -> int:
-        """LDDR -- LDD repeated while BC != 0; 21 T-states per repeat, 16 on the last."""
+        """LDDR -- LDD repeated while BC != 0; 21 T-states per repeat, 16 on the last (UM0080 p.
+        136; Young 4.2, 4.5).
+
+        WZ, and X/Y on a repeat: SST ed b8.json.
+        """
         repeat = self._block_ld(False)
         if repeat:
             self._block_repeat()
@@ -107,7 +121,11 @@ class BlockMixin:
         return 21 if repeat else 16
 
     def _op_cpir(self) -> int:
-        """CPIR -- CPI repeated while BC != 0 and A != (HL); 21 T-states per repeat, 16 last."""
+        """CPIR -- CPI repeated while BC != 0 and A != (HL); 21 T-states per repeat, 16 last (UM0080
+        p. 139; Young 4.2, 4.5).
+
+        WZ, and X/Y on a repeat: SST ed b1.json.
+        """
         repeat = self._block_cp(True)
         if repeat:
             self._block_repeat()
@@ -115,7 +133,11 @@ class BlockMixin:
         return 21 if repeat else 16
 
     def _op_cpdr(self) -> int:
-        """CPDR -- CPD repeated while BC != 0 and A != (HL); 21 T-states per repeat, 16 last."""
+        """CPDR -- CPD repeated while BC != 0 and A != (HL); 21 T-states per repeat, 16 last (UM0080
+        p. 142; Young 4.2, 4.5).
+
+        WZ, and X/Y on a repeat: SST ed b9.json.
+        """
         repeat = self._block_cp(False)
         if repeat:
             self._block_repeat()

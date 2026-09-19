@@ -98,7 +98,11 @@ class ALUMixin:
         return r
 
     def _op_alu_r(self, opcode: int) -> int:
-        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,r -- 8-bit ALU with a register or (HL) operand."""
+        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,r -- 8-bit ALU with a register or (HL) operand (UM0080
+        pp. 145-164).
+
+        X/Y: bits 5 and 3 of the result (Young 2.3), but of the operand for CP (z80full).
+        """
         group = (opcode >> 3) & 0x07
         src = opcode & 0x07
         if src == 6:
@@ -112,13 +116,15 @@ class ALUMixin:
         return t_states
 
     def _op_alu_n(self, opcode: int) -> int:
-        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,n -- 8-bit ALU with an immediate operand."""
+        """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,n -- 8-bit ALU with an immediate operand (UM0080 pp.
+        147-164).
+        """
         self._alu_a((opcode >> 3) & 0x07, self._read_operand_byte())
         self.q = self._f
         return 7
 
     def _op_neg(self) -> int:
-        """NEG -- replace A with its two's-complement negation."""
+        """NEG -- replace A with its two's-complement negation (UM0080 p. 176)."""
         self.a = self._sub(0, self.a, 0)
         self.q = self._f
         return 8
@@ -142,35 +148,37 @@ class ALUMixin:
             self._cp(self.a, value)
 
     def _op_inc_r(self, opcode: int) -> int:
-        """INC r"""
+        """INC r (UM0080 p. 165)."""
         dest = (opcode >> 3) & 0x07
         self._write_reg(dest, self._inc(self._read_reg(dest)))
         self.q = self._f
         return 4
 
     def _op_dec_r(self, opcode: int) -> int:
-        """DEC r"""
+        """DEC r (UM0080 p. 170)."""
         dest = (opcode >> 3) & 0x07
         self._write_reg(dest, self._dec(self._read_reg(dest)))
         self.q = self._f
         return 4
 
     def _op_inc_hl(self) -> int:
-        """INC (HL)"""
+        """INC (HL) (UM0080 p. 167)."""
         addr = self._hl()
         self.write_byte(addr, self._inc(self.read_byte(addr)))
         self.q = self._f
         return 11
 
     def _op_dec_hl(self) -> int:
-        """DEC (HL)"""
+        """DEC (HL) (UM0080 p. 170)."""
         addr = self._hl()
         self.write_byte(addr, self._dec(self.read_byte(addr)))
         self.q = self._f
         return 11
 
     def _op_daa(self) -> int:
-        """DAA -- decimal-adjust A after a BCD ADD/SUB, steered by H, N, and C."""
+        """DAA -- decimal-adjust A after a BCD ADD/SUB, steered by H, N, and C (UM0080 p. 173; Young
+        4.7).
+        """
         original = a = self.a
         f = self._f
         carry = f & FLAG_C
@@ -188,7 +196,7 @@ class ALUMixin:
         return 4
 
     def _op_cpl(self) -> int:
-        """CPL -- complement A, setting H/N and X/Y from the result."""
+        """CPL -- complement A, setting H/N and X/Y from the result (UM0080 p. 175)."""
         self.a ^= 0xFF
         self._f = (
             (self._f & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C)) | FLAG_H | FLAG_N | (self.a & FLAG_XY)
@@ -197,7 +205,10 @@ class ALUMixin:
         return 4
 
     def _op_scf_ccf(self, opcode: int) -> int:
-        """SCF/CCF -- including their Q-sensitive undocumented X/Y behavior."""
+        """SCF/CCF -- including their Q-sensitive undocumented X/Y behavior (UM0080 pp. 178-179).
+
+        Q: z80ccf (hardware, the rule's discovery); SST 37.json, 3f.json.
+        """
         f = self._f
         # Q holds F only if the previous M1 cycle wrote flags. If it did, F's X/Y
         # are masked and A alone supplies them; otherwise X/Y = (F | A). A DD/FD
@@ -242,7 +253,11 @@ class ALUMixin:
         return r
 
     def _op_add_hl_rr(self, opcode: int) -> int:
-        """ADD HL,rr -- only H, N, C and X/Y change; S/Z/PV are preserved."""
+        """ADD HL,rr -- only H, N, C and X/Y change; S/Z/PV are preserved (UM0080 p. 188; Young
+        4.6).
+
+        WZ: z80memptr; SST 09.json.
+        """
         pair_index = (opcode >> 4) & 0x03
         hl = self._hl()
         value = self._read_pair(pair_index)
@@ -261,7 +276,10 @@ class ALUMixin:
         return 11
 
     def _op_adc_hl_rr(self, opcode: int) -> int:
-        """ADC HL,rr"""
+        """ADC HL,rr (UM0080 p. 190; Young 4.6).
+
+        WZ: z80memptr; SST ed 4a.json.
+        """
         pair_index = (opcode >> 4) & 0x03
         hl = self._hl()
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
@@ -271,7 +289,10 @@ class ALUMixin:
         return 15
 
     def _op_sbc_hl_rr(self, opcode: int) -> int:
-        """SBC HL,rr"""
+        """SBC HL,rr (UM0080 p. 192; Young 4.6).
+
+        WZ: z80memptr; SST ed 42.json.
+        """
         pair_index = (opcode >> 4) & 0x03
         hl = self._hl()
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
@@ -281,14 +302,14 @@ class ALUMixin:
         return 15
 
     def _op_inc_rr(self, opcode: int) -> int:
-        """INC rr -- no flags."""
+        """INC rr -- no flags (UM0080 p. 198)."""
         pair_index = (opcode >> 4) & 0x03
         self._write_pair(pair_index, (self._read_pair(pair_index) + 1) & 0xFFFF)
         self.q = 0
         return 6
 
     def _op_dec_rr(self, opcode: int) -> int:
-        """DEC rr -- no flags."""
+        """DEC rr -- no flags (UM0080 p. 201)."""
         pair_index = (opcode >> 4) & 0x03
         self._write_pair(pair_index, (self._read_pair(pair_index) - 1) & 0xFFFF)
         self.q = 0
