@@ -34,6 +34,10 @@ class CoreMixin:
         self.bc_ = 0
         self.de_ = 0
         self.hl_ = 0
+        # Q mirrors the ALU's last flag output: every instruction ends with
+        # `self.q = self._f` if it wrote flags and `self.q = 0` if it did not.
+        # Only SCF/CCF read it (undocumented X/Y). Q=0 from writing F=0 is
+        # indistinguishable from 'not written', harmlessly: F's X/Y are 0 too.
         self.q = 0
         self._io_data = 0
         self.halted = False
@@ -56,12 +60,6 @@ class CoreMixin:
         # R counts M1 (opcode fetch) cycles in its low 7 bits; bit 7 is only ever
         # written by LD R,A and is preserved across the increment.
         self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
-
-    def _update_q(self, flags_modified: bool) -> None:
-        # Q mirrors the ALU's last flag output: the new F when this instruction wrote
-        # flags, else 0. Only SCF/CCF read it (undocumented X/Y). Q=0 from writing
-        # F=0 is indistinguishable from 'not written', harmlessly: F's X/Y are 0 too.
-        self.q = self._f if flags_modified else 0
 
     # An opcode or prefix fetch is an M1 cycle and bumps R; operand and
     # displacement bytes (_read_operand_byte) are ordinary reads and do not.
@@ -110,7 +108,7 @@ class CoreMixin:
         self.iff2 = False
         self.halted = False
         self._ei_delay = 0
-        self._update_q(False)
+        self.q = 0
         return 3
 
     def _accept_non_maskable_interrupt(self) -> int:
@@ -134,7 +132,7 @@ class CoreMixin:
         self._push_word(self.pc)
         self.wz = 0x0066
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _accept_maskable_interrupt(self) -> int:
@@ -172,7 +170,7 @@ class CoreMixin:
             self.wz = (high << 8) | low
             self.pc = self.wz
             t_states = 19
-        self._update_q(False)
+        self.q = 0
         return t_states
 
     def _hl(self) -> int:

@@ -711,7 +711,7 @@ def _main() -> None:
         def fake_nop_decode(self: VectorCPU) -> int:
             self.pc = (self.pc + 1) & 0xFFFF
             self._inc_r()
-            self._update_q(False)
+            self.q = 0
             return 4
 
         VectorCPU.decode_and_execute = fake_nop_decode

@@ -116,12 +116,11 @@ def test_halt_sets_halted_flag_and_leaves_state_untouched() -> None:
     assert cpu.q == 0  # HALT does not write F, so Q is cleared
 
 
-def test_q_tracking_latches_f_or_clears() -> None:
-    cpu = MemoryCPU()
-    cpu.f.byte = 0b1011_0101
-    cpu._update_q(True)
-    assert cpu.q == 0b1011_0101
-    cpu._update_q(False)
+def test_q_latches_f_after_a_flag_write_and_clears_after_anything_else() -> None:
+    cpu = MemoryCPU(bytes((0xAF, 0x00)) + bytes(0x10000 - 2))  # XOR A; NOP
+    cpu.step()
+    assert cpu.q == cpu.f.byte == 0x44  # Z and PV
+    cpu.step()
     assert cpu.q == 0
 
 

@@ -21,7 +21,7 @@ class LoadMixin:
             t_states = 7
         else:
             self._write_reg(dest, value)
-        self._update_q(False)
+        self.q = 0
         return t_states
 
     def _op_ld_r_n(self, opcode: int) -> int:
@@ -34,7 +34,7 @@ class LoadMixin:
         else:
             self._write_reg(dest, value)
             t_states = 7
-        self._update_q(False)
+        self.q = 0
         return t_states
 
     def _op_ld_a_irr(self, opcode: int) -> int:
@@ -42,7 +42,7 @@ class LoadMixin:
         self.wz = self._bc() if opcode == 0x0A else self._de()
         self.a = self.read_byte(self.wz)
         self.wz = (self.wz + 1) & 0xFFFF
-        self._update_q(False)
+        self.q = 0
         return 7
 
     def _op_ld_irr_a(self, opcode: int) -> int:
@@ -52,7 +52,7 @@ class LoadMixin:
         # After the write the address latch increments its low byte only, and its
         # high byte is overwritten by A (the data bus value): WZ = A:(addr+1)&FF.
         self.wz = ((self.a << 8) | ((self.wz + 1) & 0xFF)) & 0xFFFF
-        self._update_q(False)
+        self.q = 0
         return 7
 
     def _op_ld_a_inn(self) -> int:
@@ -60,7 +60,7 @@ class LoadMixin:
         self.wz = self._read_operand_word()
         self.a = self.read_byte(self.wz)
         self.wz = (self.wz + 1) & 0xFFFF
-        self._update_q(False)
+        self.q = 0
         return 13
 
     def _op_ld_inn_a(self) -> int:
@@ -70,19 +70,19 @@ class LoadMixin:
         # After the write the address latch increments its low byte only, and its
         # high byte is overwritten by A (the data bus value): WZ = A:(addr+1)&FF.
         self.wz = ((self.a << 8) | ((self.wz + 1) & 0xFF)) & 0xFFFF
-        self._update_q(False)
+        self.q = 0
         return 13
 
     def _op_ld_i_a(self) -> int:
         """LD I,A"""
         self.i = self.a
-        self._update_q(False)
+        self.q = 0
         return 9
 
     def _op_ld_r_a(self) -> int:
         """LD R,A"""
         self.r = self.a
-        self._update_q(False)
+        self.q = 0
         return 9
 
     def _op_ld_a_i(self) -> int:
@@ -90,7 +90,7 @@ class LoadMixin:
         self.a = self.i
         # PV reports IFF2, the only way software can read the interrupt-enable state.
         self._f = (self._f & FLAG_C) | SZXY[self.a] | (FLAG_PV if self.iff2 else 0)
-        self._update_q(True)
+        self.q = self._f
         return 9
 
     def _op_ld_a_r(self) -> int:
@@ -98,7 +98,7 @@ class LoadMixin:
         self.a = self.r
         # PV reports IFF2, the only way software can read the interrupt-enable state.
         self._f = (self._f & FLAG_C) | SZXY[self.a] | (FLAG_PV if self.iff2 else 0)
-        self._update_q(True)
+        self.q = self._f
         return 9
 
     def _op_ld_nn_hl(self) -> int:
@@ -107,7 +107,7 @@ class LoadMixin:
         self.write_byte(addr, self.l)
         self.wz = (addr + 1) & 0xFFFF
         self.write_byte(self.wz, self.h)
-        self._update_q(False)
+        self.q = 0
         return 16
 
     def _op_ld_hl_nn_from_mem(self) -> int:
@@ -116,7 +116,7 @@ class LoadMixin:
         self.l = self.read_byte(addr)
         self.wz = (addr + 1) & 0xFFFF
         self.h = self.read_byte(self.wz)
-        self._update_q(False)
+        self.q = 0
         return 16
 
     def _op_ld_nn_rr(self, pair_index: int) -> int:
@@ -126,7 +126,7 @@ class LoadMixin:
         self.write_byte(addr, value & 0xFF)
         self.wz = (addr + 1) & 0xFFFF
         self.write_byte(self.wz, value >> 8)
-        self._update_q(False)
+        self.q = 0
         return 20
 
     def _op_ld_rr_nn_from_mem(self, pair_index: int) -> int:
@@ -135,25 +135,25 @@ class LoadMixin:
         low = self.read_byte(addr)
         self.wz = (addr + 1) & 0xFFFF
         self._write_pair(pair_index, low | (self.read_byte(self.wz) << 8))
-        self._update_q(False)
+        self.q = 0
         return 20
 
     def _op_ld_sp_hl(self) -> int:
         """LD SP,HL -- copy HL into SP."""
         self.sp = self._hl()
-        self._update_q(False)
+        self.q = 0
         return 6
 
     def _op_pop_rr(self, sub_opcode: int) -> int:
         """POP rr"""
         self._write_pair((sub_opcode >> 4) & 0x03, self._pop_word())
-        self._update_q(False)
+        self.q = 0
         return 10
 
     def _op_push_rr(self, sub_opcode: int) -> int:
         """PUSH rr"""
         self._push_word(self._read_pair((sub_opcode >> 4) & 0x03))
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _op_pop_af(self) -> int:
@@ -161,17 +161,17 @@ class LoadMixin:
         value = self._pop_word()
         self.a = (value >> 8) & 0xFF
         self._f = value & 0xFF
-        self._update_q(False)
+        self.q = 0
         return 10
 
     def _op_push_af(self) -> int:
         """PUSH AF"""
         self._push_word((self.a << 8) | self._f)
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _op_ld_rr_nn(self, opcode: int) -> int:
         """LD rr,nn -- BC, DE, HL, or SP from a 16-bit immediate."""
         self._write_pair((opcode >> 4) & 0x03, self._read_operand_word())
-        self._update_q(False)
+        self.q = 0
         return 10

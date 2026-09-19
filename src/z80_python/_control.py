@@ -29,13 +29,13 @@ class ControlMixin:
         # JR e is 0x18; JR NZ/Z/NC/C are 0x20-0x38, whose bits 4-3 are cc 0-3.
         taken = opcode == 0x18 or self._cond_true((opcode >> 3) & 0x03)
         if not taken:
-            self._update_q(False)
+            self.q = 0
             return 7
         # Unlike JP, the target is only computed (and latched into WZ) when the
         # branch is taken; a not-taken JR leaves WZ untouched.
         self.wz = (self.pc + displacement) & 0xFFFF
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 12
 
     def _op_jp(self, opcode: int) -> int:
@@ -45,13 +45,13 @@ class ControlMixin:
         self.wz = self._read_operand_word()
         if opcode == 0xC3 or self._cond_true((opcode >> 3) & 0x07):
             self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 10
 
     def _op_jp_hl(self) -> int:
         """JP (HL)"""
         self.pc = self._hl()
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_ex_de_hl(self) -> int:
@@ -61,7 +61,7 @@ class ControlMixin:
         self.e = self.l
         self.h = (de >> 8) & 0xFF
         self.l = de & 0xFF
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_interrupt_enable(self, enabled: bool) -> int:
@@ -69,7 +69,7 @@ class ControlMixin:
         self.iff1 = enabled
         self.iff2 = enabled
         self._ei_delay = 1 if enabled else 0
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_call(self, opcode: int) -> int:
@@ -78,35 +78,35 @@ class ControlMixin:
         # condition fails and the jump is not taken.
         self.wz = self._read_operand_word()
         if opcode != 0xCD and not self._cond_true((opcode >> 3) & 0x07):
-            self._update_q(False)
+            self.q = 0
             return 10
         self._push_word(self.pc)
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 17
 
     def _op_ret(self) -> int:
         """RET"""
         self.wz = self._pop_word()
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 10
 
     def _op_ret_cc(self, opcode: int) -> int:
         """RET cc -- 11 T-states taken, 5 not."""
         if not self._cond_true((opcode >> 3) & 0x07):
-            self._update_q(False)
+            self.q = 0
             return 5
         self.wz = self._pop_word()
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _ret_iff(self) -> int:
         self.wz = self._pop_word()
         self.pc = self.wz
         self.iff1 = self.iff2
-        self._update_q(False)
+        self.q = 0
         return 14
 
     def _op_retn(self) -> int:
@@ -122,18 +122,18 @@ class ControlMixin:
         self._push_word(self.pc)
         self.wz = ((opcode >> 3) & 0x07) << 3
         self.pc = self.wz
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _op_im(self, mode: int) -> int:
         """IM n -- select Z80 interrupt mode 0, 1, or 2."""
         self.im = mode
-        self._update_q(False)
+        self.q = 0
         return 8
 
     def _op_ed_nop(self) -> int:
         """NOP (undocumented ED-prefixed form) -- 8 T-states, no state change."""
-        self._update_q(False)
+        self.q = 0
         return 8
 
     def _op_exx(self) -> int:
@@ -143,7 +143,7 @@ class ControlMixin:
         self._write_pair(1, self.de_)
         self._write_pair(2, self.hl_)
         self.bc_, self.de_, self.hl_ = bc, de, hl
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_ex_sp_hl(self) -> int:
@@ -155,18 +155,18 @@ class ControlMixin:
         self.h = (value >> 8) & 0xFF
         self.l = value & 0xFF
         self.wz = value
-        self._update_q(False)
+        self.q = 0
         return 19
 
     def _op_halt(self) -> int:
         """HALT"""
         self.halted = True
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_nop(self) -> int:
         """NOP"""
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_ex_af_af(self) -> int:
@@ -175,7 +175,7 @@ class ControlMixin:
         self.a = (self.af_ >> 8) & 0xFF
         self._f = self.af_ & 0xFF
         self.af_ = af
-        self._update_q(False)
+        self.q = 0
         return 4
 
     def _op_djnz(self) -> int:
@@ -185,7 +185,7 @@ class ControlMixin:
         if self.b:
             self.wz = (self.pc + displacement) & 0xFFFF
             self.pc = self.wz
-            self._update_q(False)
+            self.q = 0
             return 13
-        self._update_q(False)
+        self.q = 0
         return 8

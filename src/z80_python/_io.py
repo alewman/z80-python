@@ -23,7 +23,7 @@ class IOMixin:
         self.wz = (self.a << 8) | self._read_operand_byte()
         self.a = self.read_port(self.wz)
         self.wz = (self.wz + 1) & 0xFFFF
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _op_out_n_a(self) -> int:
@@ -33,7 +33,7 @@ class IOMixin:
         # Same latch behavior as LD (nn),A: the port's high byte (A) is kept and only
         # the low byte of the address increments.
         self.wz = (self.wz & 0xFF00) | ((self.wz + 1) & 0xFF)
-        self._update_q(False)
+        self.q = 0
         return 11
 
     def _op_in_r_c(self, opcode: int) -> int:
@@ -44,7 +44,7 @@ class IOMixin:
         self._f = (self._f & FLAG_C) | SZXYP[value]
         if dest != 6:
             self._write_reg(dest, value)
-        self._update_q(True)
+        self.q = self._f
         return 12
 
     def _op_out_c_r(self, opcode: int) -> int:
@@ -56,7 +56,7 @@ class IOMixin:
         value = 0 if src == 6 else self._read_reg(src)
         self.write_port(addr, value)
         self.wz = (addr + 1) & 0xFFFF
-        self._update_q(False)
+        self.q = 0
         return 12
 
     def _block_ini(self, increment: bool) -> bool:
@@ -111,25 +111,25 @@ class IOMixin:
     def _op_ini(self) -> int:
         """INI -- (HL) <- port BC; HL++, B--."""
         self._block_ini(True)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_ind(self) -> int:
         """IND -- (HL) <- port BC; HL--, B--."""
         self._block_ini(False)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_outi(self) -> int:
         """OUTI -- B--, then port BC <- (HL); HL++."""
         self._block_outi(True)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_outd(self) -> int:
         """OUTD -- B--, then port BC <- (HL); HL--."""
         self._block_outi(False)
-        self._update_q(True)
+        self.q = self._f
         return 16
 
     def _op_inir(self) -> int:
@@ -138,7 +138,7 @@ class IOMixin:
         if repeat:
             self._block_repeat()
             self._post_in_o_r()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
 
     def _op_indr(self) -> int:
@@ -147,7 +147,7 @@ class IOMixin:
         if repeat:
             self._block_repeat()
             self._post_in_o_r()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
 
     def _op_otir(self) -> int:
@@ -156,7 +156,7 @@ class IOMixin:
         if repeat:
             self._block_repeat()
             self._post_in_o_r()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
 
     def _op_otdr(self) -> int:
@@ -165,5 +165,5 @@ class IOMixin:
         if repeat:
             self._block_repeat()
             self._post_in_o_r()
-        self._update_q(True)
+        self.q = self._f
         return 21 if repeat else 16
