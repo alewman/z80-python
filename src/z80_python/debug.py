@@ -99,11 +99,7 @@ def _boundary_kind(state: CPUState) -> BoundaryKind:
         return BoundaryKind.RESET
     if state.non_maskable_interrupt_pending:
         return BoundaryKind.NON_MASKABLE_INTERRUPT
-    if (
-        state.maskable_interrupt_vector is not None
-        and state.iff1
-        and state.ei_delay == 0
-    ):
+    if state.maskable_interrupt_vector is not None and state.iff1 and state.ei_delay == 0:
         return BoundaryKind.MASKABLE_INTERRUPT
     if state.halted:
         return BoundaryKind.HALT_IDLE
@@ -205,9 +201,7 @@ class DebugSession:
 
         if type(max_steps) is not int or max_steps <= 0:
             raise ValueError("max_steps must be a positive integer")
-        if max_t_states is not None and (
-            type(max_t_states) is not int or max_t_states <= 0
-        ):
+        if max_t_states is not None and (type(max_t_states) is not int or max_t_states <= 0):
             raise ValueError("max_t_states must be a positive integer or None")
         if type(stop_on_halt) is not bool:
             raise ValueError("stop_on_halt must be a bool")

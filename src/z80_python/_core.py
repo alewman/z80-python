@@ -3,6 +3,11 @@
 from z80_python._flags import Flags
 
 
+def _signed8(value: int) -> int:
+    """Read a displacement byte as two's complement: 0x00..0x7F forward, 0x80..0xFF back."""
+    return value - 0x100 if value & 0x80 else value
+
+
 class CoreMixin:
     """Private implementation of CPU state and core helpers."""
 

@@ -57,4 +57,4 @@ def test_scf_ccf_q_sensitive_xy_behavior(
         expected_f,
         expected_f,
         0xBEEF,
-    )  # noqa: W292
+    )

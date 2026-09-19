@@ -123,4 +123,4 @@ class ZexRunner:
                 raise ZexRunError(f"ZEX halted unexpectedly at PC 0x{self.cpu.pc:04X}")
             t_states += self.cpu.decode_and_execute()
             instructions += 1
-        raise ZexRunError(f"ZEX did not terminate within {max_instructions:,} instructions")  # noqa: W292
+        raise ZexRunError(f"ZEX did not terminate within {max_instructions:,} instructions")

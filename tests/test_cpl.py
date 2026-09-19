@@ -48,4 +48,4 @@ def test_cpl_complements_a_preserves_szpvc_and_latches_result_flags(
         0xF7,
         0xF7,
         0xBEEF,
-    )  # noqa: W292
+    )

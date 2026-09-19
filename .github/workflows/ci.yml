@@ -20,6 +20,7 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
       - run: python -m ruff check .
+      - run: python -m ruff format --check .
       - run: python examples/minimal_z80_host.py
 
   # The one external oracle small enough to run on every push: a ~2 MB tarball

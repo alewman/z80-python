@@ -40,4 +40,4 @@ def test_ld_sp_hl_copies_pair_without_changing_flags_or_wz() -> None:
         0xC5,
         0,
         0xBEEF,
-    )  # noqa: W292
+    )

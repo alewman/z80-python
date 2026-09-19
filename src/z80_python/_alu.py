@@ -113,8 +113,7 @@ class ALUMixin:
 
     def _op_alu_n(self, opcode: int) -> int:
         """ADD/ADC/SUB/SBC/AND/XOR/OR/CP A,n -- 8-bit ALU with an immediate operand."""
-        group = {0xC6: 0, 0xCE: 1, 0xD6: 2, 0xDE: 3, 0xE6: 4, 0xEE: 5, 0xF6: 6, 0xFE: 7}[opcode]
-        self._alu_a(group, self._read_operand_byte())
+        self._alu_a((opcode >> 3) & 0x07, self._read_operand_byte())
         self._update_q(True)
         return 7
 

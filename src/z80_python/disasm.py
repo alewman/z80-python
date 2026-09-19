@@ -3,6 +3,8 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from z80_python._core import _signed8
+
 ByteReader = Callable[[int], int]
 
 _REGISTERS = ("B", "C", "D", "E", "H", "L", "(HL)", "A")
@@ -92,9 +94,7 @@ def _word(cursor: _Cursor) -> int:
 
 
 def _relative_target(cursor: _Cursor) -> str:
-    displacement = cursor.read()
-    if displacement >= 0x80:
-        displacement -= 0x100
+    displacement = _signed8(cursor.read())
     return _hex16((cursor.address + displacement) & 0xFFFF)
 
 
@@ -109,9 +109,7 @@ def _instruction(cursor: _Cursor, start: int, mnemonic: str, *operands: str) -> 
     return Instruction(start, bytes(cursor.data), mnemonic, operands)
 
 
-def _alu_instruction(
-    cursor: _Cursor, start: int, operation: int, source: str
-) -> Instruction:
+def _alu_instruction(cursor: _Cursor, start: int, operation: int, source: str) -> Instruction:
     mnemonic, explicit_a = _ALU[operation]
     operands = ("A", source) if explicit_a else (source,)
     return _instruction(cursor, start, mnemonic, *operands)
@@ -295,15 +293,33 @@ def _decode_main(cursor: _Cursor, start: int, opcode: int) -> Instruction:
 
 
 _INDEX_PLAIN_LD = {
-    0x40, 0x41, 0x42, 0x43, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4F,
-    0x50, 0x51, 0x52, 0x53, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5F,
-    0x78, 0x79, 0x7A, 0x7B, 0x7F,
+    0x40,
+    0x41,
+    0x42,
+    0x43,
+    0x47,
+    0x48,
+    0x49,
+    0x4A,
+    0x4B,
+    0x4F,
+    0x50,
+    0x51,
+    0x52,
+    0x53,
+    0x57,
+    0x58,
+    0x59,
+    0x5A,
+    0x5B,
+    0x5F,
+    0x78,
+    0x79,
+    0x7A,
+    0x7B,
+    0x7F,
 }
-_INDEX_PLAIN_ALU = {
-    opcode
-    for opcode in range(0x80, 0xC0)
-    if (opcode & 7) in (0, 1, 2, 3, 7)
-}
+_INDEX_PLAIN_ALU = {opcode for opcode in range(0x80, 0xC0) if (opcode & 7) in (0, 1, 2, 3, 7)}
 _INDEX_IGNORED = (
     {0x00, 0x01, 0x08, 0x10, 0x11, 0x31, 0x76}
     | _INDEX_PLAIN_LD
@@ -369,8 +385,24 @@ def _decode_index(cursor: _Cursor, start: int, prefix: int) -> Instruction:
         return _instruction(cursor, start, "LD", high if y == 4 else low, _hex8(cursor.read()))
     if opcode in (0x24, 0x25, 0x2C, 0x2D):
         return _instruction(cursor, start, "INC" if z == 4 else "DEC", high if y == 4 else low)
-    if opcode in (0x84, 0x85, 0x8C, 0x8D, 0x94, 0x95, 0x9C, 0x9D,
-                  0xA4, 0xA5, 0xAC, 0xAD, 0xB4, 0xB5, 0xBC, 0xBD):
+    if opcode in (
+        0x84,
+        0x85,
+        0x8C,
+        0x8D,
+        0x94,
+        0x95,
+        0x9C,
+        0x9D,
+        0xA4,
+        0xA5,
+        0xAC,
+        0xAD,
+        0xB4,
+        0xB5,
+        0xBC,
+        0xBD,
+    ):
         return _alu_instruction(cursor, start, y, high if z == 4 else low)
     if opcode in (0x09, 0x19, 0x29, 0x39):
         pair = index if ((opcode >> 4) & 3) == 2 else _PAIRS[(opcode >> 4) & 3]
@@ -405,9 +437,7 @@ def _decode_index(cursor: _Cursor, start: int, prefix: int) -> Instruction:
         return _instruction(cursor, start, "JP", f"({index})")
     if opcode == 0xF9:
         return _instruction(cursor, start, "LD", "SP", index)
-    raise NotImplementedError(
-        f"unhandled {index} opcode 0x{opcode:02X} at address 0x{start:04X}"
-    )
+    raise NotImplementedError(f"unhandled {index} opcode 0x{opcode:02X} at address 0x{start:04X}")
 
 
 def disassemble(reader: ByteReader, address: int = 0) -> Instruction:

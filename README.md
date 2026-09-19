@@ -85,13 +85,15 @@ See [AI-assisted development and validation](docs/ai-assisted-development.md).
 
 ## Version status
 
-The current release is **`0.3.0`**.
+The current release is **`0.3.0`**; **`0.4.0` is in progress** on `main`
+(see its [release note](docs/releases/0.4.0.md)).
 
 | Source | Status | Contents |
 | --- | --- | --- |
 | PyPI `0.3.0` | Published release | Complete validated core and inspection toolkit |
 | GitHub `v0.2.0` | Published milestone | RESET, CPU state, disassembly, and debugger foundations |
 | GitHub `v0.3.0` | Current release | API hardening and advanced trace diagnostics |
+| `main` `0.4.0.dev0` | In progress | Conformance kit, FUSE oracle, bus-transaction certification |
 
 ### Install from PyPI
 
