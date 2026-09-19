@@ -122,6 +122,6 @@ class ZexRunner:
                 continue
             if self.cpu.halted:
                 raise ZexRunError(f"ZEX halted unexpectedly at PC 0x{self.cpu.pc:04X}")
-            t_states += self.cpu.decode_and_execute()
+            t_states += self.cpu.step()
             instructions += 1
         raise ZexRunError(f"ZEX did not terminate within {max_instructions:,} instructions")

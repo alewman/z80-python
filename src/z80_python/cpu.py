@@ -173,16 +173,24 @@ class Z80CPU(
             return self._accept_reset()
         if self._non_maskable_interrupt_pending:
             return self._accept_non_maskable_interrupt()
-        if self._can_accept_maskable_interrupt():
+        delay_was_active = self._ei_delay > 0
+        if self.iff1 and not delay_was_active and self._pending_maskable_interrupt is not None:
             return self._accept_maskable_interrupt()
 
-        delay_was_active = self._ei_delay > 0
         if self.halted:
             self._inc_r()
             self.q = 0
             t_states = 4
         else:
-            t_states = self.decode_and_execute()
+            # decode_and_execute() and _fetch_byte(), written out: every
+            # instruction passes through these lines, and the three calls they
+            # replace cost more than most handlers.
+            pc = self.pc
+            opcode = self.read_byte(pc)
+            self.pc = (pc + 1) & 0xFFFF
+            self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
+            handler, argument = self._main_page[opcode]
+            t_states = handler(self) if argument is None else handler(self, argument)
         if delay_was_active:
             self._ei_delay -= 1
         return t_states

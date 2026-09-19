@@ -676,18 +676,18 @@ def _main() -> None:
         assert cpu.read_byte(0x0100) == 0x00, hex(cpu.read_byte(0x0100))
 
         # Error path: this core implements every opcode, so stage the condition
-        # a port's unfinished core would produce, a decode that raises
+        # a port's unfinished core would produce, a step that raises
         # NotImplementedError, and check it surfaces as the named exception.
         unsupported_case = {
             "initial": {**case["initial"], "ram": [[0x0100, 0xDD], [0x0101, 0xED]]},
             "final": case["final"],
         }
 
-        def unfinished_decode(self: VectorCPU) -> int:
+        def unfinished_step(self: VectorCPU) -> int:
             raise NotImplementedError(f"unhandled opcode 0xDD at PC 0x{self.pc:04X}")
 
-        real_decode = VectorCPU.decode_and_execute
-        VectorCPU.decode_and_execute = unfinished_decode  # type: ignore[method-assign]
+        real_step = VectorCPU.step
+        VectorCPU.step = unfinished_step  # type: ignore[method-assign]
         try:
             run_test_case(unsupported_case)
         except OpcodeNotImplementedError as exc:
@@ -700,25 +700,12 @@ def _main() -> None:
                 "run_test_case should raise OpcodeNotImplementedError for an unsupported opcode"
             )
         finally:
-            VectorCPU.decode_and_execute = real_decode  # type: ignore[method-assign]
+            VectorCPU.step = real_step  # type: ignore[method-assign]
 
-        # Happy path: temporarily substitute a NOP implementation for the
-        # skeleton's decode_and_execute and confirm run_test_case reproduces
-        # the embedded sample's expected final state end-to-end (the sample is
-        # a NOP case, so final differs from initial only in pc and r).
-        real_decode = VectorCPU.decode_and_execute
-
-        def fake_nop_decode(self: VectorCPU) -> int:
-            self.pc = (self.pc + 1) & 0xFFFF
-            self._inc_r()
-            self.q = 0
-            return 4
-
-        VectorCPU.decode_and_execute = fake_nop_decode
-        try:
-            actual = run_test_case(case)
-        finally:
-            VectorCPU.decode_and_execute = real_decode
+        # Happy path: the embedded sample is a NOP case, so run_test_case must
+        # reproduce its final state end to end (it differs from the initial
+        # state only in pc and r).
+        actual = run_test_case(case)
         assert_state_equal(case["final"], actual)
         assert actual["pc"] == case["final"]["pc"], actual["pc"]
         assert actual["r"] == case["final"]["r"], actual["r"]

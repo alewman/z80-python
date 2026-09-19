@@ -150,10 +150,10 @@ def test_run_test_case_raises_custom_exception_for_unimplemented_opcode(
     unfinished core raising ``NotImplementedError`` must surface as the named
     exception carrying the opcode and PC read from the vector."""
 
-    def unfinished_decode(self: VectorCPU) -> int:
+    def unfinished_step(self: VectorCPU) -> int:
         raise NotImplementedError(f"unhandled opcode 0xDD at PC 0x{self.pc:04X}")
 
-    monkeypatch.setattr(VectorCPU, "decode_and_execute", unfinished_decode)
+    monkeypatch.setattr(VectorCPU, "step", unfinished_step)
     unsupported_case = {
         "initial": {
             **real_case["initial"],
