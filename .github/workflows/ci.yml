@@ -50,15 +50,4 @@ jobs:
       - run: python -m pip install --force-reinstall dist/*.whl
       - name: Smoke-test installed public API
         working-directory: ${{ runner.temp }}
-        run: |
-          python - <<'PY'
-          from z80_python import CPUState, DebugSession, Z80CPU, disassemble_bytes
-
-          memory = bytearray(0x10000)
-          cpu = Z80CPU(memory.__getitem__, memory.__setitem__)
-          memory[:2] = bytes((0x3E, 0x2A))
-          assert cpu.capture_state() == CPUState()
-          assert disassemble_bytes(memory[:2]).text == "LD A, 0x2A"
-          record = DebugSession(cpu, peek_byte=memory.__getitem__).step()
-          assert (record.after.a, record.t_states) == (0x2A, 7)
-          PY
+        run: python ${{ github.workspace }}/scripts/smoke_installed_package.py
