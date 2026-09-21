@@ -145,7 +145,12 @@ implemented rather than left as an error.
   into `r[z]` (`_index.py`, `_op_index_rot`, `_op_index_res_set`).
 - `SLL` (CB 30-37): shift left and set bit 0 (`_rotate.py`, `_sll`).
 - `IN (C)` / `IN F,(C)` (ED 70): sets flags, stores nothing (`_io.py`).
-- `OUT (C),0` (ED 71): NMOS parts output 0 (`_io.py`).
+- `OUT (C),0` (ED 71): NMOS parts output 0 (`_io.py`). CMOS parts are reported
+  to output 0xFF; set `cpu.cmos_out_c_zero = True` to model that (default
+  `False`). The report: sverx's SMS Test Suite detects a CMOS Z80 (the Game
+  Gear's) by writing `OUT (C),0` to a VDP port and reading back non-zero, and
+  SMS Power forum thread 17116 discusses it. No hardware-captured oracle in this
+  repository covers it.
 - Every undefined ED opcode is an 8-T-state NOP (`_dispatch.py`).
 - `NEG`, `RETN`, and `IM` have several aliases in the ED table.
 
