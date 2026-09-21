@@ -9,7 +9,7 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ## [Unreleased]
 
-## [0.4.0] — 2026-09-18
+## [0.4.0] — 2026-09-21
 
 The polish release: the family's reference core made faster, smaller to test,
 cited line by line, and honest about the tier of every claim.
