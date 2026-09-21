@@ -43,6 +43,9 @@ class CoreMixin:
         self.halted = False
         self._ei_delay = 0
         self.ei_nmi_iff2_erratum = False
+        # Opt-in CMOS behavior: the undocumented OUT (C),0 drives 0xFF instead of 0
+        # (see _io.py and docs/undocumented-behavior.md). Default False: NMOS.
+        self.cmos_out_c_zero = False
         self._reset_pending = False
         self._pending_maskable_interrupt: int | None = None
         self._non_maskable_interrupt_pending = False
