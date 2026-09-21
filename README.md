@@ -33,7 +33,7 @@ The project is deliberately:
 
 Each oracle below is named with its tier: where its expected values came from.
 A lower tier detects; the highest tier that checks a claim decides it
-([oracle tiers](docs/validation.md#oracle-tiers)). The instruction core passes:
+([oracle tiers](https://github.com/alewman/z80-python/blob/v0.4.0/docs/validation.md#oracle-tiers)). The instruction core passes:
 
 - **hardware-captured:** three of raxoft/z80test's programs (`z80full`,
   `z80memptr`, `z80ccf`), whose values were recorded on a real 48K ZX
@@ -59,7 +59,7 @@ on SingleStepTests and FUSE agreeing.
 
 Release 0.4.0 was certified against every one of these, on both CPython and
 PyPy, at commit `b1720b6`. Exact source revisions, hashes, commands, timings,
-and scope limits are recorded in [the validation evidence](docs/validation.md).
+and scope limits are recorded in [the validation evidence](https://github.com/alewman/z80-python/blob/v0.4.0/docs/validation.md).
 
 This is an instruction-level semantic and lifecycle claim. It is **not** a claim
 of cycle-accurate bus-pin behavior or of a complete computer.
@@ -78,7 +78,7 @@ separated rather than implied:
 **ZEXDOC and ZEXALL are certified locally, not in CI.** They need
 `zexdoc.com`/`zexall.com`, which no script here fetches, and take roughly 90
 minutes each under CPython. Their revisions, file hashes, commands and timings
-are in [the validation evidence](docs/validation.md); treat that record, not a
+are in [the validation evidence](https://github.com/alewman/z80-python/blob/v0.4.0/docs/validation.md); treat that record, not a
 badge, as the citation for those two gates.
 
 ## Vibe coded, oracle validated
@@ -92,12 +92,12 @@ Generated emulator code can be plausible and wrong, especially around prefixes,
 undocumented flags, WZ/MEMPTR, Q, and refresh behavior. The project therefore
 does not treat AI output or code review as proof. Independent SingleStep vectors,
 focused regressions, ZEX CRCs, and real emulator integrations are the authority.
-See [AI-assisted development and validation](docs/ai-assisted-development.md).
+See [AI-assisted development and validation](https://github.com/alewman/z80-python/blob/v0.4.0/docs/ai-assisted-development.md).
 
 ## Version status
 
-The current release is **`0.4.0`** (see its [release note](docs/releases/0.4.0.md)
-and the [changelog](CHANGELOG.md)). It changes how a host embeds the CPU; the
+The current release is **`0.4.0`** (see its [release note](https://github.com/alewman/z80-python/blob/v0.4.0/docs/releases/0.4.0.md)
+and the [changelog](https://github.com/alewman/z80-python/blob/v0.4.0/CHANGELOG.md)). It changes how a host embeds the CPU; the
 changelog's **Breaking** section has the one-line migration.
 
 | Source | Status | Contents |
@@ -154,7 +154,7 @@ assert cpu.a == 0x2B
 Devices on the I/O bus come in as `read_port=` and `write_port=`; without them
 `IN` reads 0xFF and `OUT` goes nowhere. This is the embedding contract of the
 whole family: [m6800-python](https://github.com/alewman/m6800-python) takes its
-bus the same way. [start-here](docs/start-here.md#the-embedding-contract) has
+bus the same way. [start-here](https://github.com/alewman/z80-python/blob/v0.4.0/docs/start-here.md#the-embedding-contract) has
 the rest. Until 0.4.0 a host subclassed `Z80CPU` and defined the four bus
 methods; that form now raises a `TypeError` naming this one.
 
@@ -182,7 +182,7 @@ interrupt. Hosts schedule devices from returned T-state totals and request
 interrupts through the public lifecycle API rather than mutating `PC`, `SP`, or
 interrupt flip-flops to synthesize entry.
 
-See [the interrupt lifecycle contract](docs/interrupt-lifecycle.md) for exact
+See [the interrupt lifecycle contract](https://github.com/alewman/z80-python/blob/v0.4.0/docs/interrupt-lifecycle.md) for exact
 state transitions and exclusions.
 
 ## Reference-core boundary
@@ -215,7 +215,7 @@ portable, and useful across different machines.
 
 ## Learning and inspection
 
-New to the Z80? Read [Start here](docs/start-here.md) first: the register file,
+New to the Z80? Read [Start here](https://github.com/alewman/z80-python/blob/v0.4.0/docs/start-here.md) first: the register file,
 the flag byte, the opcode bit fields every handler decodes, the prefix model,
 and the three internal registers (WZ, Q, R) that only emulator authors meet.
 
@@ -243,8 +243,8 @@ These APIs make the project useful as:
 - an executable environment where an AI agent can inspect real state instead of
   guessing from source code alone.
 
-See [CPU state](docs/cpu-state.md), [disassembly](docs/disassembly.md), and
-[undocumented behavior](docs/undocumented-behavior.md).
+See [CPU state](https://github.com/alewman/z80-python/blob/v0.4.0/docs/cpu-state.md), [disassembly](https://github.com/alewman/z80-python/blob/v0.4.0/docs/disassembly.md), and
+[undocumented behavior](https://github.com/alewman/z80-python/blob/v0.4.0/docs/undocumented-behavior.md).
 
 ## Conformance for ports in other languages
 
@@ -258,8 +258,8 @@ python -m z80_python.conformance trace examples/conformance/interrupts.json --ou
 python -m z80_python.conformance diff  examples/conformance/interrupts.json yours.jsonl
 ```
 
-See [conformance](docs/conformance.md) for the host contract and the
-certification ladder, and [the trace schema](docs/trace-schema.md) for the
+See [conformance](https://github.com/alewman/z80-python/blob/v0.4.0/docs/conformance.md) for the host contract and the
+certification ladder, and [the trace schema](https://github.com/alewman/z80-python/blob/v0.4.0/docs/trace-schema.md) for the
 record format.
 
 ## Advanced diagnostics and tooling
@@ -287,8 +287,8 @@ step before the later control-flow divergence into `0x0066`.
 
 These are deterministic tools, not an embedded LLM or AI provider. Any human UI,
 agent, MCP adapter, or model can consume the same structured contracts. See
-[debug sessions](docs/debug-session.md), [trace comparison](docs/trace-comparison.md),
-and [the tooling roadmap](docs/debugging-roadmap.md).
+[debug sessions](https://github.com/alewman/z80-python/blob/v0.4.0/docs/debug-session.md), [trace comparison](https://github.com/alewman/z80-python/blob/v0.4.0/docs/trace-comparison.md),
+and [the tooling roadmap](https://github.com/alewman/z80-python/blob/v0.4.0/docs/debugging-roadmap.md).
 
 ## Development
 
@@ -310,27 +310,27 @@ python -m pytest -q
 
 ZEX recertification is reserved for release candidates and semantic-core changes;
 reproduction instructions and finite execution budgets are documented in
-[the validation evidence](docs/validation.md).
+[the validation evidence](https://github.com/alewman/z80-python/blob/v0.4.0/docs/validation.md).
 
 ## Project records
 
-- [0.4.0 release notes (in development)](docs/releases/0.4.0.md)
-- [0.3.0 release notes](docs/releases/0.3.0.md)
-- [Validation evidence and scope](docs/validation.md)
-- [Public API stability](docs/api-stability.md)
-- [AI-assisted development and validation](docs/ai-assisted-development.md)
-- [Extraction provenance](docs/provenance.md)
-- [Interrupt lifecycle](docs/interrupt-lifecycle.md)
-- [CPU state](docs/cpu-state.md)
-- [Disassembly](docs/disassembly.md)
-- [Debug sessions](docs/debug-session.md)
-- [Trace comparison](docs/trace-comparison.md)
-- [Conformance for other cores](docs/conformance.md)
-- [Trace schema](docs/trace-schema.md)
-- [Start here: Z80 primer](docs/start-here.md)
-- [Undocumented behavior](docs/undocumented-behavior.md)
-- [Debugging and agent-tooling roadmap](docs/debugging-roadmap.md)
-- [Contribution guidance](CONTRIBUTING.md)
+- [0.4.0 release notes](https://github.com/alewman/z80-python/blob/v0.4.0/docs/releases/0.4.0.md)
+- [0.3.0 release notes](https://github.com/alewman/z80-python/blob/v0.4.0/docs/releases/0.3.0.md)
+- [Validation evidence and scope](https://github.com/alewman/z80-python/blob/v0.4.0/docs/validation.md)
+- [Public API stability](https://github.com/alewman/z80-python/blob/v0.4.0/docs/api-stability.md)
+- [AI-assisted development and validation](https://github.com/alewman/z80-python/blob/v0.4.0/docs/ai-assisted-development.md)
+- [Extraction provenance](https://github.com/alewman/z80-python/blob/v0.4.0/docs/provenance.md)
+- [Interrupt lifecycle](https://github.com/alewman/z80-python/blob/v0.4.0/docs/interrupt-lifecycle.md)
+- [CPU state](https://github.com/alewman/z80-python/blob/v0.4.0/docs/cpu-state.md)
+- [Disassembly](https://github.com/alewman/z80-python/blob/v0.4.0/docs/disassembly.md)
+- [Debug sessions](https://github.com/alewman/z80-python/blob/v0.4.0/docs/debug-session.md)
+- [Trace comparison](https://github.com/alewman/z80-python/blob/v0.4.0/docs/trace-comparison.md)
+- [Conformance for other cores](https://github.com/alewman/z80-python/blob/v0.4.0/docs/conformance.md)
+- [Trace schema](https://github.com/alewman/z80-python/blob/v0.4.0/docs/trace-schema.md)
+- [Start here: Z80 primer](https://github.com/alewman/z80-python/blob/v0.4.0/docs/start-here.md)
+- [Undocumented behavior](https://github.com/alewman/z80-python/blob/v0.4.0/docs/undocumented-behavior.md)
+- [Debugging and agent-tooling roadmap](https://github.com/alewman/z80-python/blob/v0.4.0/docs/debugging-roadmap.md)
+- [Contribution guidance](https://github.com/alewman/z80-python/blob/v0.4.0/CONTRIBUTING.md)
 
 ## License
 
