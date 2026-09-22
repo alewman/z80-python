@@ -4,6 +4,20 @@ import pytest
 from conftest import MemoryCPU
 
 
+def test_reset_clears_i_and_r_as_the_manual_says() -> None:
+    # Zilog UM0080, "RESET": it "clears the Program Counter and registers I and
+    # R". MAME 0.285's z80.cpp does the same. A board's sound driver reading R
+    # after a reset sees it (Sonic 3's, on the Mega Drive).
+    cpu = MemoryCPU()
+    cpu.i, cpu.r, cpu.sp, cpu.wz = 0x8F, 0x5A, 0x4000, 0x1234
+    cpu.request_reset()
+
+    assert cpu.step() == 3
+    assert (cpu.i, cpu.r, cpu.pc) == (0, 0, 0)
+    # Unchanged, as the interrupt-lifecycle document says: the host owns the rest.
+    assert (cpu.sp, cpu.wz) == (0x4000, 0x1234)
+
+
 def test_reset_has_priority_reinitializes_interrupt_execution_state_and_stays_asserted() -> None:
     cpu = MemoryCPU()
     cpu.pc, cpu.sp, cpu.im, cpu.iff1, cpu.iff2, cpu.halted = 0x1234, 0x4000, 2, True, True, True
