@@ -65,9 +65,13 @@ class IOMixin:
         """
         src = (opcode >> 3) & 0x07
         addr = self._bc()
-        # OUT (C),0: the undocumented (HL) slot has no register, NMOS parts drive 0
-        # (CMOS parts drive 0xFF; this core models NMOS, as the vectors do).
-        value = 0 if src == 6 else self._read_reg(src)
+        # OUT (C),0: the undocumented (HL) slot has no register. NMOS parts drive 0
+        # (Young 3.4: "ED71 simply outs the value 0"), as the vectors do. CMOS parts
+        # drive 0xFF when a host opts in with cmos_out_c_zero: reported, not
+        # hardware-captured here (sverx's SMS Test Suite tells a CMOS Game Gear
+        # from an NMOS Master System by this instruction; SMS Power forum 17116).
+        slot_zero = 0xFF if self.cmos_out_c_zero else 0
+        value = slot_zero if src == 6 else self._read_reg(src)
         self.write_port(addr, value)
         self.wz = (addr + 1) & 0xFFFF
         self.q = 0
