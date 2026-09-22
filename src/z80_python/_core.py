@@ -104,6 +104,12 @@ class CoreMixin:
 
         self.pc = 0
         self.im = 0
+        # "Clears the Program Counter and registers I and R" (Zilog UM0080,
+        # "RESET"); MAME 0.285's z80.cpp clears them too. A sound driver that
+        # reads R after a board-level reset sees this (Sonic 3's, on the Mega
+        # Drive, found by megadrive-python).
+        self.i = 0
+        self.r = 0
         self.iff1 = False
         self.iff2 = False
         self.halted = False
