@@ -25,13 +25,16 @@ A host asserts RESET with `cpu.request_reset()` and releases it with
 `cpu.clear_reset()`. `cpu.reset_pending` exposes the line level. RESET is modeled
 as level-sensitive: every `step()` while it remains asserted returns 3 T-states
 without fetching an instruction or accessing the stack. It takes priority over
-NMI and maskable-interrupt requests, sets `PC` to `0x0000`, selects IM 0, clears
-`IFF1` and `IFF2`, exits HALT, and cancels a pending EI delay.
+NMI and maskable-interrupt requests, sets `PC` to `0x0000`, clears `I` and `R`,
+selects IM 0, clears `IFF1` and `IFF2`, exits HALT, and cancels a pending EI
+delay. `PC`, `I` and `R` are what the manual names: RESET "clears the Program
+Counter and registers I and R" (Zilog UM0080, "RESET"), and MAME 0.285's
+`z80.cpp` clears them as well.
 
 This instruction core deliberately defines only those processor-state effects.
-It preserves general registers, `SP`, `I`, `R`, `WZ`, and device request state;
-the host owns device resets and decides when to release RESET. This models the
-useful board-level lifecycle without claiming cycle-accurate reset-pin timing.
+It preserves general registers, `SP`, `WZ`, and device request state; the host
+owns device resets and decides when to release RESET. This models the useful
+board-level lifecycle without claiming cycle-accurate reset-pin timing.
 
 ## Non-maskable interrupts
 
