@@ -5,7 +5,6 @@ instruction group; ``_index_dispatch.py`` routes them and adds the prefix cost.
 """
 
 from z80_python._core import _signed8
-from z80_python._flags import FLAG_H, FLAG_PV, FLAG_S, FLAG_XY, FLAG_Z
 from z80_python._rotate import _bit_flags
 
 
@@ -44,15 +43,7 @@ class IndexMixin:
         index = self._get_index(prefix)
         value = index if pair_index == 2 else self._read_pair(pair_index)
         self.wz = (index + 1) & 0xFFFF
-        z = index + value
-        result = z & 0xFFFF
-        self._f = (
-            (self._f & (FLAG_S | FLAG_Z | FLAG_PV))
-            | ((result >> 8) & FLAG_XY)
-            | (((index ^ value ^ result) >> 8) & FLAG_H)
-            | (z >> 16)
-        )
-        self._set_index(prefix, result)
+        self._set_index(prefix, self._add16_keep_szpv(index, value))
         self.q = self._f
         return 15
 

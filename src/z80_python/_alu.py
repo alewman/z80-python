@@ -239,6 +239,25 @@ class ALUMixin:
         )
         return r
 
+    def _add16_keep_szpv(self, x: int, y: int) -> int:
+        """The ``ADD HL,rr`` / ``ADD IX,rr`` rule: H, N, C and X/Y change, S/Z/PV are kept.
+
+        Not a carry=0 case of :meth:`_add16`, which is the ADC/SBC rule: the ADD
+        forms leave S, Z and P/V as the previous instruction left them, so there
+        is no result-derived S or Z term and no overflow term at all. Both 16-bit
+        ADD handlers -- HL's and the prefixed IX/IY one in ``_index.py`` -- share
+        this one statement of the rule.
+        """
+        z = x + y
+        result = z & 0xFFFF
+        self._f = (
+            (self._f & (FLAG_S | FLAG_Z | FLAG_PV))
+            | ((result >> 8) & FLAG_XY)
+            | (((x ^ y ^ result) >> 8) & FLAG_H)
+            | (z >> 16)
+        )
+        return result
+
     def _sub16(self, x: int, y: int, carry: int) -> int:
         z = x - y - carry
         r = z & 0xFFFF
@@ -263,15 +282,7 @@ class ALUMixin:
         value = self._read_pair(pair_index)
         # 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = (hl + 1) & 0xFFFF
-        z = hl + value
-        result = z & 0xFFFF
-        self._f = (
-            (self._f & (FLAG_S | FLAG_Z | FLAG_PV))
-            | ((result >> 8) & FLAG_XY)
-            | (((hl ^ value ^ result) >> 8) & FLAG_H)
-            | (z >> 16)
-        )
-        self._write_pair(2, result)
+        self._write_pair(2, self._add16_keep_szpv(hl, value))
         self.q = self._f
         return 11
 
