@@ -108,6 +108,49 @@ def test_di_masks_a_pending_interrupt_until_ei_delay_has_elapsed() -> None:
     assert cpu.pc == 0x0038
 
 
+def test_ei_after_ei_defers_the_interrupt_until_after_the_following_instruction() -> None:
+    # Young, The Undocumented Z80 Documented, 5.5: "Directly after an EI or DI
+    # instruction, interrupts aren't accepted." So the second EI re-arms the delay:
+    # the request is taken after the NOP, not directly after the second EI.
+    cpu = MemoryCPU()
+    cpu.im, cpu.sp = 1, 0x4000
+    cpu.memory[:3] = bytes((0xFB, 0xFB, 0x00))  # EI; EI; NOP
+    cpu.request_maskable_interrupt()
+
+    assert (cpu.step(), cpu.step()) == (4, 4)
+    assert (cpu.pc, cpu.capture_state().ei_delay) == (2, 1)
+    assert cpu.step() == 4  # the NOP runs; no interrupt directly after the second EI
+    assert cpu.pc == 3
+    assert cpu.step() == 13
+    assert cpu.pc == 0x0038
+
+
+def test_a_chain_of_eis_holds_the_interrupt_off_until_the_instruction_after_the_last() -> None:
+    cpu = MemoryCPU()
+    cpu.im, cpu.sp = 1, 0x4000
+    cpu.memory[:4] = bytes((0xFB, 0xFB, 0xFB, 0x00))  # EI; EI; EI; NOP
+    cpu.request_maskable_interrupt()
+
+    assert [cpu.step() for _ in range(4)] == [4, 4, 4, 4]
+    assert (cpu.pc, cpu.maskable_interrupt_pending) == (4, True)
+    assert cpu.step() == 13
+    assert cpu.pc == 0x0038
+
+
+def test_di_directly_after_ei_leaves_a_valid_capturable_state() -> None:
+    # EI; DI once left the delay counter at -1, which CPUState rejects, so
+    # capture_state() raised until the next EI or RESET.
+    cpu = MemoryCPU()
+    cpu.im, cpu.sp = 1, 0x4000
+    cpu.memory[:3] = bytes((0xFB, 0xF3, 0x00))  # EI; DI; NOP
+    cpu.request_maskable_interrupt()
+
+    assert [cpu.step() for _ in range(3)] == [4, 4, 4]
+    state = cpu.capture_state()
+    assert (state.pc, state.ei_delay, state.iff1, state.iff2) == (3, 0, False, False)
+    assert cpu.maskable_interrupt_pending is True
+
+
 def test_halt_idles_until_accepted_interrupt_wakes_the_cpu() -> None:
     cpu = MemoryCPU()
     cpu.im, cpu.iff1, cpu.iff2, cpu.sp = 1, True, True, 0x4000

@@ -177,6 +177,14 @@ class Z80CPU(
         delay_was_active = self._ei_delay > 0
         if self.iff1 and not delay_was_active and self._pending_maskable_interrupt is not None:
             return self._accept_maskable_interrupt()
+        if delay_was_active:
+            # The instruction after EI is about to run, so the EI delay ends here,
+            # before it executes rather than after: if that instruction is EI it
+            # re-arms the delay, and if it is DI the delay stays 0. "Directly after
+            # an EI or DI instruction, interrupts aren't accepted" (Young, The
+            # Undocumented Z80 Documented, 5.5, p. 21), so EI; EI; NOP takes a
+            # pending interrupt after the NOP, never between the EIs and the NOP.
+            self._ei_delay = 0
 
         if self.halted:
             self._inc_r()
@@ -192,8 +200,6 @@ class Z80CPU(
             self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
             handler, argument = self._main_page[opcode]
             t_states = handler(self) if argument is None else handler(self, argument)
-        if delay_was_active:
-            self._ei_delay -= 1
         return t_states
 
     def capture_state(self) -> CPUState:

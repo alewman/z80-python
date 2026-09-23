@@ -9,6 +9,14 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ## [Unreleased]
 
+### Fixed
+
+- `EI` directly after `EI` now re-arms the interrupt delay: a pending maskable
+  interrupt is accepted after the instruction following the last `EI`, not
+  directly after the second one (Young 5.5). `EI; DI` no longer leaves the
+  delay counter at -1, which made `capture_state()` raise until the next `EI`
+  or RESET. Found by z80-python-fast's lockstep fuzz.
+
 ### Added
 
 - `Z80CPU.cmos_out_c_zero` (default `False`): the undocumented `OUT (C),0`
