@@ -89,7 +89,10 @@ byte raises `NotImplementedError` while leaving the request pending, rather than
 silently pretending that arbitrary injected opcodes have correct bus semantics.
 
 `EI` delays acceptance until one following instruction has completed; `DI` cancels
-that delay and masks a pending request. A halted CPU performs 4-T-state idle steps
+that delay and masks a pending request. The delay ends as the following instruction
+starts, so an `EI` there re-arms it: `EI; EI; NOP` takes a pending request after the
+`NOP`, never directly after either `EI` ("Directly after an EI or DI instruction,
+interrupts aren't accepted", Young, *The Undocumented Z80 Documented*, 5.5). A halted CPU performs 4-T-state idle steps
 until an accepted maskable interrupt wakes it. A run of DD/FD prefixes and the
 opcode that ends it is one `step()`, so a request is accepted after the run and
 never inside it, matching hardware (Young, *The Undocumented Z80 Documented*,
