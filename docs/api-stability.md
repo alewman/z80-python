@@ -20,7 +20,9 @@ The supported surface includes:
 - the `python -m z80_python` command line and `console.parse_number`;
 - `z80_python.conformance`: `Manifest` and its parts, `ConformanceHost`,
   `trace_manifest`, `diff_manifest`, the manifest JSON form, and the command line;
-- `CommandDebugger` and command result/error values; and
+- `CommandDebugger` and command result/error values;
+- `z80_python.timing`: `instruction_timing`, `InstructionTiming` and
+  `AccessTiming`, where in an instruction each of its accesses falls; and
 - trace comparison values and functions.
 
 The package ships a `py.typed` marker so these annotations are available to static
