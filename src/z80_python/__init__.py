@@ -25,6 +25,7 @@ from z80_python.debug import (
     next_boundary,
 )
 from z80_python.disasm import ByteReader, Instruction, disassemble, disassemble_bytes
+from z80_python.timing import AccessTiming, InstructionTiming, instruction_timing
 from z80_python.trace import (
     TRACE_SCHEMA_VERSION,
     TraceDifference,
@@ -53,6 +54,7 @@ __all__ = [
     "TRACE_SCHEMA_VERSION",
     "Z80CPU",
     "Access",
+    "AccessTiming",
     "BoundaryKind",
     "ByteReader",
     "CPUState",
@@ -63,6 +65,7 @@ __all__ = [
     "DebugTarget",
     "Flags",
     "Instruction",
+    "InstructionTiming",
     "RunResult",
     "StepRecord",
     "StopReason",
@@ -74,6 +77,7 @@ __all__ = [
     "disassemble_bytes",
     "first_session_divergence",
     "first_trace_divergence",
+    "instruction_timing",
     "iter_session_steps",
     "iter_trace_divergences",
     "next_boundary",

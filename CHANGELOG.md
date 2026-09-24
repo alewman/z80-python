@@ -19,6 +19,12 @@ fact; entries from 0.4.0 onward are written as the work lands.
 
 ### Added
 
+- `z80_python.timing.instruction_timing(data)`: where inside an instruction each
+  of its memory and I/O accesses falls, in T-states, for boards that arbitrate a
+  shared bus (#16). A table derived from the SingleStepTests corpus's per-T-state
+  bus samples by `scripts/derive_access_timing.py`; `tests/test_access_timing.py`
+  re-derives it and runs the core against every shape of every instruction.
+  Emulator-derived tier. The execution path is unchanged.
 - `Z80CPU.cmos_out_c_zero` (default `False`): the undocumented `OUT (C),0`
   (ED 71) outputs 0xFF, as CMOS Z80s are reported to (the Game Gear's, for
   sms-python). The default keeps the NMOS 0 that the oracles check.

@@ -172,13 +172,22 @@ were already covered: `VectorCPU` feeds port reads from the vector's own `ports`
 array in oracle order and refuses a read at an unexpected address, and verifies
 every port write against the expected entry.
 
-**Not claimed: which T-state each access occupies.** `step()` returns an
-instruction total, so a host learns that `EX (SP),HL` took 19 T-states but not
-that its two writes land at T13 and T16. Entries in `cycles` without a memory
-strobe -- internal cycles, and the `I << 8 | R` refresh address the Z80 asserts
-during M1 -- are skipped rather than modelled. This boundary is architectural,
-not evidential: the `cycles` array carries the per-T-state data, and would
-support the stronger claim whenever the core can emit at that granularity.
+**Which T-state each access occupies: a table beside the core, not the core.**
+`step()` returns an instruction total, so a host learns from it that
+`EX (SP),HL` took 19 T-states but not where its two writes land.
+`z80_python.timing` answers that from a table
+(`scripts/derive_access_timing.py`) derived from the `cycles` arrays: for each
+of the 1,604 instructions, the sample index at which each access's strobes first
+show, identical in every case of the instruction (the script refuses otherwise).
+Conditional and repeating instructions have two shapes, which agree on every
+access they share, so the k-th access's offset is known before the instruction
+decides which way it goes. `tests/test_access_timing.py` re-derives the table
+and runs this core on one case of every shape: 1,671 shapes, each with the
+table's accesses in the table's order and one of its lengths. The claim is
+emulator-derived, as the pin traces are; the undefined ED opcodes and stray
+DD/FD prefixes, absent from the corpus, are timed by rule (Young 3.4, 3.7), and
+interrupt acknowledge cycles are not covered. Internal cycles and the M1
+refresh address are still not modelled.
 
 The distinction is not academic. Two write orderings that leave identical memory
 are indistinguishable to every state-comparing oracle -- ZEXALL, z80test, and
