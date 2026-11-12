@@ -5,8 +5,9 @@ module remains the stable import surface for ``Z80CPU``, ``Flags``, and flag mas
 
 The host owns memory and every device: it passes ``read_byte(address)`` and
 ``write_byte(address, value)`` in, optionally ``read_port`` and ``write_port``
-too, calls :meth:`Z80CPU.step`, and adds the returned T-states to its own
-clock. See docs/start-here.md, "The embedding contract".
+too, and optionally ``read_m1(address, kind)`` to see every M1 cycle, calls
+:meth:`Z80CPU.step`, and adds the returned T-states to its own clock. See
+docs/start-here.md, "The embedding contract".
 """
 
 from collections.abc import Callable
@@ -14,7 +15,7 @@ from collections.abc import Callable
 from z80_python._alu import ALUMixin
 from z80_python._blocks import BlockMixin
 from z80_python._control import ControlMixin
-from z80_python._core import CoreMixin
+from z80_python._core import _FETCH, CoreMixin, M1Cycle
 from z80_python._dispatch import (
     CB_RULES,
     ED_DEFAULT,
@@ -43,12 +44,15 @@ from z80_python.state import CPUState
 
 ReadByte = Callable[[int], int]
 WriteByte = Callable[[int, int], None]
+ReadM1 = Callable[[int, M1Cycle], int]
 
 _BUS = ("read_byte", "write_byte", "read_port", "write_port")
+_HOOKS = (*_BUS, "read_m1")
 
 # Preserve the historical public identity even though the implementation lives
 # in a private module.
 Flags.__module__ = __name__
+M1Cycle.__module__ = __name__
 
 __all__ = [
     "FLAG_C",
@@ -62,7 +66,9 @@ __all__ = [
     "Z80CPU",
     "CPUState",
     "Flags",
+    "M1Cycle",
     "ReadByte",
+    "ReadM1",
     "WriteByte",
 ]
 
@@ -99,9 +105,20 @@ class Z80CPU(
         memory = bytearray(0x10000)
         cpu = Z80CPU(memory.__getitem__, memory.__setitem__)
 
-    The four callables are ordinary attributes and may be replaced later (the
-    debugger's access tracking does exactly that). A newly constructed CPU has
-    zeroed processor state; :meth:`request_reset` gives a board-level reset.
+    ``read_m1(address, kind)``, optional, is called once for every M1 cycle,
+    with an :class:`M1Cycle` saying which kind. For ``M1Cycle.FETCH`` (opcode
+    and prefix bytes) the CPU executes the byte it returns, so a board whose
+    opcode fetches and data reads differ (an encrypted Z80) supplies both;
+    for ``HALT``, ``NMI`` and ``ACKNOWLEDGE`` the return value is ignored and
+    the call only tells the host the cycle happened, so it can add its own
+    wait states. Without it opcode fetches go through ``read_byte`` and those
+    three cycles make no call, exactly as before. Operands, displacements and
+    the last byte of ``DD CB d op`` are always ``read_byte`` reads.
+
+    The callables are ordinary attributes and may be replaced later (the
+    debugger's access tracking does exactly that); ``read_m1`` may also be set
+    to ``None``. A newly constructed CPU has zeroed processor state;
+    :meth:`request_reset` gives a board-level reset.
     """
 
     def __init__(
@@ -111,6 +128,7 @@ class Z80CPU(
         *,
         read_port: ReadByte | None = None,
         write_port: WriteByte | None = None,
+        read_m1: ReadM1 | None = None,
     ) -> None:
         if read_port is None:
             read_port = _undriven_port
@@ -119,10 +137,15 @@ class Z80CPU(
         for name, bus in zip(_BUS, (read_byte, write_byte, read_port, write_port), strict=True):
             if not callable(bus):
                 raise TypeError(f"{name} must be callable, not {type(bus).__name__}")
+        if read_m1 is not None and not callable(read_m1):
+            raise TypeError(f"read_m1 must be callable or None, not {type(read_m1).__name__}")
         self.read_byte = read_byte
         self.write_byte = write_byte
         self.read_port = read_port
         self.write_port = write_port
+        # None, not a copy of read_byte: a host may replace read_byte later,
+        # and fetches must follow it.
+        self.read_m1 = read_m1
         super().__init__()
         cls = type(self)
         if "_pages" not in cls.__dict__:
@@ -147,13 +170,14 @@ class Z80CPU(
         # Until 0.4.0 a host subclassed Z80CPU and defined the bus as methods.
         # The instance attributes set in __init__ would silently shadow them,
         # so refuse the old form when the class is defined, naming the new one.
+        # read_m1 is refused for the same reason.
         super().__init_subclass__(**kwargs)
-        legacy = [name for name in _BUS if name in cls.__dict__]
+        legacy = [name for name in _HOOKS if name in cls.__dict__]
         if legacy:
             raise TypeError(
                 f"{cls.__name__} defines {', '.join(legacy)} as methods; since 0.4.0 the "
                 "bus is passed in: Z80CPU(read_byte, write_byte, *, read_port=None, "
-                "write_port=None)"
+                "write_port=None, read_m1=None)"
             )
 
     def step(self) -> int:
@@ -187,6 +211,10 @@ class Z80CPU(
             self._ei_delay = 0
 
         if self.halted:
+            if self.read_m1 is not None:
+                # Each HALT cycle is an M1 fetch of the HALT opcode, data
+                # ignored (UM0080 p. 14; Young 5.4); PC is already past it.
+                self.read_m1((self.pc - 1) & 0xFFFF, M1Cycle.HALT)
             self._inc_r()
             self.q = 0
             t_states = 4
@@ -195,7 +223,8 @@ class Z80CPU(
             # instruction passes through these lines, and the three calls they
             # replace cost more than most handlers.
             pc = self.pc
-            opcode = self.read_byte(pc)
+            read_m1 = self.read_m1
+            opcode = self.read_byte(pc) if read_m1 is None else read_m1(pc, _FETCH)
             self.pc = (pc + 1) & 0xFFFF
             self.r = (self.r & 0x80) | ((self.r + 1) & 0x7F)
             handler, argument = self._main_page[opcode]

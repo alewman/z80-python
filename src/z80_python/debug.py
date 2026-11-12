@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
+from z80_python._core import M1Cycle
 from z80_python.disasm import ByteReader, Instruction, disassemble
 from z80_python.state import CPUState
 
@@ -154,9 +155,14 @@ class DebugSession:
     ``track_accesses=True`` wraps the CPU's four bus callables (``read_byte``,
     ``write_byte``, ``read_port``, ``write_port``) to record every access in
     :attr:`StepRecord.accesses` and to enable watchpoints; :meth:`close` puts
-    the originals back. The target may be a whole board rather than a bare
-    CPU: an object whose ``step()`` runs its devices around one CPU step and
-    whose ``cpu`` attribute is the processor, whose bus is then the one tracked.
+    the originals back. If the CPU has a ``read_m1`` it is wrapped too, and
+    each opcode fetch through it is recorded as the ``"r"`` access it would
+    have been through ``read_byte``; its HALT, NMI and acknowledge cycles are
+    not memory accesses the core makes and are not recorded.
+
+    The target may be a whole board rather than a bare CPU: an object whose
+    ``step()`` runs its devices around one CPU step and whose ``cpu`` attribute
+    is the processor, whose bus is then the one tracked.
     """
 
     def __init__(
@@ -202,8 +208,14 @@ class DebugSession:
 
     def _wrap_bus(self) -> None:
         cpu = self.cpu
-        originals = (cpu.read_byte, cpu.write_byte, cpu.read_port, cpu.write_port)
-        read_byte, write_byte, read_port, write_port = originals
+        originals = (
+            cpu.read_byte,
+            cpu.write_byte,
+            cpu.read_port,
+            cpu.write_port,
+            getattr(cpu, "read_m1", None),
+        )
+        read_byte, write_byte, read_port, write_port, read_m1 = originals
         self._originals = originals
         log: list[Access] = []
         self._accesses = log
@@ -230,13 +242,25 @@ class DebugSession:
         cpu.write_byte = tracked_write_byte
         cpu.read_port = tracked_read_port
         cpu.write_port = tracked_write_port
+        if read_m1 is not None:
+
+            def tracked_read_m1(address: int, kind: M1Cycle) -> int:
+                value = read_m1(address, kind)
+                if kind is M1Cycle.FETCH:
+                    log.append(("r", address, value))
+                return value
+
+            cpu.read_m1 = tracked_read_m1
 
     def close(self) -> None:
         """Stop tracking accesses and give the CPU its own bus callables back."""
 
         if self._originals is not None:
             cpu = self.cpu
-            cpu.read_byte, cpu.write_byte, cpu.read_port, cpu.write_port = self._originals
+            *bus, read_m1 = self._originals
+            cpu.read_byte, cpu.write_byte, cpu.read_port, cpu.write_port = bus
+            if read_m1 is not None:
+                cpu.read_m1 = read_m1
             self._originals = None
             self._accesses = None
 

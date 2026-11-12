@@ -13,6 +13,7 @@ from z80_python.cpu import (
     Z80CPU,
     CPUState,
     Flags,
+    M1Cycle,
 )
 from z80_python.debug import (
     Access,
@@ -66,6 +67,7 @@ __all__ = [
     "Flags",
     "Instruction",
     "InstructionTiming",
+    "M1Cycle",
     "RunResult",
     "StepRecord",
     "StopReason",

@@ -1,6 +1,35 @@
 """CPU state, fetch, stack, and register-selection helpers."""
 
+from enum import Enum
+
 from z80_python._flags import Flags, FlagsView
+
+
+class M1Cycle(Enum):
+    """Which kind of M1 cycle a host's ``read_m1(address, kind)`` is being told about.
+
+    Every M1 cycle drives the Z80's /M1 pin low (UM0080 p. 6). Only ``FETCH``
+    reads a byte the CPU executes; the other three are M1 cycles whose data
+    the CPU does not take from memory. See docs/issues/0001-m1-cycle-signal.md.
+    """
+
+    #: An opcode byte, a prefix byte (CB, ED, DD, FD, or a stray DD/FD of a run),
+    #: or the opcode after a prefix; not ``d`` or ``op`` of ``DD CB d op``, which
+    #: are ordinary reads (UM0080 p. 9; Young 6.1).
+    FETCH = "fetch"
+    #: One 4-T-state cycle of the HALT state: a fetch of the HALT opcode whose
+    #: data is ignored (UM0080 p. 14; Young 5.4).
+    HALT = "halt"
+    #: The first cycle of an NMI response: a fetch at PC whose data is ignored
+    #: (UM0080 p. 13-14).
+    NMI = "nmi"
+    #: A maskable-interrupt acknowledge: M1 with /IORQ instead of /MREQ, two
+    #: automatic wait states, in every interrupt mode (UM0080 p. 12-13).
+    ACKNOWLEDGE = "acknowledge"
+
+
+# Bound once so the fetch paths load a module global, not an enum attribute.
+_FETCH = M1Cycle.FETCH
 
 
 def _signed8(value: int) -> int:
@@ -66,9 +95,12 @@ class CoreMixin:
 
     # An opcode or prefix fetch is an M1 cycle and bumps R; operand and
     # displacement bytes (_read_operand_byte) are ordinary reads and do not.
-    # That is why DD CB d op advances R by 2 (two prefixes) and not 4.
+    # That is why DD CB d op advances R by 2 (two prefixes) and not 4. A host
+    # that passed read_m1 sees each of these fetches, and only these, as a
+    # FETCH; without one the fetch is a read_byte like any other.
     def _fetch_byte(self) -> int:
-        value = self.read_byte(self.pc)
+        read_m1 = self.read_m1
+        value = self.read_byte(self.pc) if read_m1 is None else read_m1(self.pc, _FETCH)
         self.pc = (self.pc + 1) & 0xFFFF
         self._inc_r()
         return value
@@ -134,6 +166,10 @@ class CoreMixin:
         else:
             self.iff2 = self.iff1
         self.iff1 = False
+        if self.read_m1 is not None:
+            # The response's first cycle is an M1 fetch at PC whose data the
+            # CPU ignores (UM0080 p. 13-14, Figure 10).
+            self.read_m1(self.pc, M1Cycle.NMI)
         self._inc_r()
         self._push_word(self.pc)
         self.wz = 0x0066
@@ -159,6 +195,11 @@ class CoreMixin:
         self.halted = False
         self.iff1 = False
         self.iff2 = False
+        if self.read_m1 is not None:
+            # The acknowledge is one M1 cycle with IORQ instead of MREQ and PC
+            # on the address bus, in every mode (UM0080 p. 12-13, Figure 9).
+            # The byte the device drives in it still comes from vector_byte.
+            self.read_m1(self.pc, M1Cycle.ACKNOWLEDGE)
         self._inc_r()
         self._push_word(self.pc)
         if self.im == 0:
