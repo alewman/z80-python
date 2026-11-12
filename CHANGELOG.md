@@ -28,6 +28,18 @@ fact; entries from 0.4.0 onward are written as the work lands.
 - `Z80CPU.cmos_out_c_zero` (default `False`): the undocumented `OUT (C),0`
   (ED 71) outputs 0xFF, as CMOS Z80s are reported to (the Game Gear's, for
   sms-python). The default keeps the NMOS 0 that the oracles check.
+- **`read_m1=`, an optional M1-cycle hook.** `Z80CPU(..., read_m1=None)`
+  takes a `read_m1(address, kind) -> int` callable that the core calls once
+  for every M1 cycle, with an `M1Cycle` kind: `FETCH` for each opcode and
+  prefix byte (the CPU executes the byte it returns, so an encrypted Z80's
+  board can give fetches and data reads different bytes), and `HALT`, `NMI`
+  and `ACKNOWLEDGE` for the M1 cycles of the HALT state, the NMI response and
+  the maskable-interrupt acknowledge (return value ignored), so a board can
+  add its own M1 wait states. Operands and both trailing bytes of
+  `DD CB d op` stay `read_byte` reads. Without the hook nothing changes.
+  `DebugSession` access tracking follows it. Requested by the ColecoVision
+  and CPS-1 QSound boards; design and sources in
+  `docs/issues/0001-m1-cycle-signal.md`.
 
 ## [0.4.0] — 2026-09-21
 

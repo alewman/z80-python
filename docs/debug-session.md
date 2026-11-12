@@ -77,7 +77,12 @@ Because the CPU takes its bus as callables (the embedding contract),
 `track_accesses=True` can see every access without the host's help: it
 replaces the CPU's `read_byte`, `write_byte`, `read_port` and `write_port`
 with wrappers that log and then call the originals, and `close()` puts the
-originals back. Nothing reads memory the program did not read. A target may
+originals back. If the CPU has a `read_m1` hook, it is wrapped too: each
+`M1Cycle.FETCH` through it is logged as the `"r"` access it would have been
+through `read_byte`, so a step's accesses read the same with or without the
+hook, and its `HALT`, `NMI` and `ACKNOWLEDGE` calls, which are not memory
+reads the core makes, are not logged. Nothing reads memory the program did
+not read. A target may
 be a whole board: an object whose `step()` runs its devices around one CPU
 step and whose `cpu` attribute is the processor, whose bus is then the one
 tracked.

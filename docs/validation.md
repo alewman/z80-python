@@ -255,6 +255,19 @@ replays it and pins the rest of the rule, and
 ports. This claim is therefore a tier below the rest of this page, and says
 so here rather than in the code.
 
+## The M1-cycle hook: documentation-derived, stated as such
+
+Which cycles `read_m1` reports, and as which kind, follows Zilog's manual
+(the `M1` pin, Figures 5 and 9-11, the HALT and interrupt-mode text) and
+Young (sections 5.4 and 6.1); [issue 0001](issues/0001-m1-cycle-signal.md)
+cites each. No oracle here observes the `/M1` pin: SingleStepTests' pin
+strings carry RD, WR, MREQ and IORQ only. The oracles do pin the evidence
+that agrees with it, the R count (one per M1) and the order and spacing of
+the reads, and they run on hosts without the hook, so they certify that the
+unhooked path is unchanged. `tests/test_m1_cycles.py` pins each M1 case and
+checks that a hook fetching from the same memory leaves state, T-states and
+the read sequence exactly as `read_byte` alone does.
+
 ## Hardware-oracle validation (z80test)
 
 SingleStepTests is emulator-derived: its generator is, in its README's words,

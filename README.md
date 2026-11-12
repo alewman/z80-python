@@ -152,7 +152,13 @@ assert cpu.a == 0x2B
 ```
 
 Devices on the I/O bus come in as `read_port=` and `write_port=`; without them
-`IN` reads 0xFF and `OUT` goes nowhere. This is the embedding contract of the
+`IN` reads 0xFF and `OUT` goes nowhere. A board that must see M1 cycles passes
+`read_m1=`, called as `read_m1(address, kind)` once for every M1 cycle with an
+`M1Cycle`: `FETCH` for each opcode and prefix byte, whose returned byte the
+CPU executes (an encrypted Z80's opcode image), and `HALT`, `NMI` and
+`ACKNOWLEDGE` for the M1 cycles that read nothing the CPU uses, so the board
+can add its own M1 wait states. Without it fetches go through `read_byte` as
+before. This is the embedding contract of the
 whole family: [m6800-python](https://github.com/alewman/m6800-python) takes its
 bus the same way. [start-here](https://github.com/alewman/z80-python/blob/v0.4.0/docs/start-here.md#the-embedding-contract) has
 the rest. Until 0.4.0 a host subclassed `Z80CPU` and defined the four bus
@@ -204,9 +210,12 @@ A host machine owns:
 
 Accordingly, the project does not claim:
 
-- cycle-accurate bus cycles, contention, `WAIT`, `BUSREQ`, or pin timing;
-- interrupt-acknowledge bus callbacks, daisy chains, or arbitrary IM 0 injected
-  instructions;
+- cycle-accurate bus cycles, contention, `WAIT`, `BUSREQ`, or pin timing
+  (`read_m1` says that an M1 cycle happened and of which kind, not when; the
+  host adds any wait states);
+- a data byte read from the bus in the interrupt acknowledge (the IM 0/IM 2
+  byte comes from `request_maskable_interrupt`), daisy chains, or arbitrary
+  IM 0 injected instructions;
 - a complete CP/M system, arcade board, console, or computer; or
 - a universal machine scheduler or save-state format.
 

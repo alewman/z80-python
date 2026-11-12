@@ -8,9 +8,9 @@ package root and listed in each public module's `__all__`.
 The supported surface includes:
 
 - `Z80CPU`, its constructor `Z80CPU(read_byte, write_byte, *, read_port=None,
-  write_port=None)` (the embedding contract in
-  [start-here](start-here.md#the-embedding-contract)), `Flags`, and flag
-  constants;
+  write_port=None, read_m1=None)` (the embedding contract in
+  [start-here](start-here.md#the-embedding-contract)), `M1Cycle` and the
+  kinds and call points of `read_m1`, `Flags`, and flag constants;
 - `CPUState` capture and restoration;
 - `Instruction` and disassembly functions;
 - `DebugSession`, its protocols, enums, and immutable result values, including

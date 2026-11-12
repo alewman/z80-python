@@ -1,8 +1,10 @@
 # Interrupt Lifecycle
 
 `z80-python` models maskable interrupts and NMIs as deterministic state
-transitions at instruction boundaries. It deliberately does not attempt to expose
-individual interrupt-acknowledge bus cycles or memory-contention timing.
+transitions at instruction boundaries. It deliberately does not attempt to model
+the interrupt-acknowledge bus cycle's data or timing, or memory contention; a
+host that passes `read_m1` is told that the acknowledge M1 cycle happened (see
+[Scope](#scope)).
 
 ## Host protocol
 
@@ -101,6 +103,11 @@ chapter 5: a long sequence of DDs holds interrupts off like a sequence of EIs).
 ## Scope
 
 This API covers the common interrupt lifecycle needed by single-CPU machine hosts,
-including arcade boards and home-computer emulators. It does not model
-interrupt-acknowledge bus callbacks, daisy-chain priority, floating-bus values,
-cycle-accurate timing, or memory contention.
+including arcade boards and home-computer emulators. A host that passed
+`read_m1` is told of the NMI response's M1 cycle (`M1Cycle.NMI`) and of the
+maskable acknowledge cycle (`M1Cycle.ACKNOWLEDGE`, every mode), each with the
+PC about to be pushed, before the push; see
+[start-here](start-here.md#the-embedding-contract). That call reports the
+cycle, it does not read the vector: the byte still comes from
+`request_maskable_interrupt(vector_byte)`. The core does not model daisy-chain
+priority, floating-bus values, cycle-accurate timing, or memory contention.

@@ -138,7 +138,8 @@ four numbers is not reproducible.
 
 ## What this does not cover
 
-Bus-level timing, memory contention, WAIT states, interrupt-acknowledge
-callbacks, and daisy chains are outside the reference core's own claim and
-therefore outside conformance. A port may model them; this kit will neither
+Bus-level timing, memory contention, WAIT states, the `read_m1` hook's calls
+(which change nothing in a trace when the hook fetches from the same memory),
+and daisy chains are outside the reference core's own claim and therefore
+outside conformance. A port may model them; this kit will neither
 check nor object.

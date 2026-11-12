@@ -168,8 +168,27 @@ while True:
   masks: `Z80CPU(memory.__getitem__, memory.__setitem__)` is a complete flat
   host. The SingleStepTests host (`validation/vector_utils.py`) fails any case
   that breaks this, so all 1,604,000 cases certify it.
-- The four callables are plain attributes of the CPU and may be replaced at
-  any time.
+- `read_m1(address, kind) -> int`, optional, is for boards that must see M1
+  cycles. The core calls it once for every M1 cycle, in bus order with the
+  other accesses, with an `M1Cycle` kind:
+
+  | `kind` | When | `address` | Return value |
+  | --- | --- | --- | --- |
+  | `M1Cycle.FETCH` | each opcode byte, each prefix byte (CB, ED, DD, FD, a stray DD/FD of a run) and the opcode after it | the byte's address | the byte the CPU executes |
+  | `M1Cycle.HALT` | each 4-T-state idle step of a halted CPU | HALT's own address | ignored |
+  | `M1Cycle.NMI` | the first cycle of an accepted NMI, before the push | PC, the address pushed | ignored |
+  | `M1Cycle.ACKNOWLEDGE` | the acknowledge cycle of an accepted maskable interrupt, in IM 0, 1 and 2, before the push | PC, the address pushed | ignored: the vector still comes from `request_maskable_interrupt` |
+
+  Operands, displacements, the IM 2 table and both `d` and `op` of
+  `DD CB d op` (which the CPU reads outside M1) are always `read_byte` reads.
+  An encrypted Z80 (Kabuki) returns its opcode image for `FETCH`; a board
+  with an M1 wait state counts calls by kind and adds its clocks, since the
+  returned T-states never include host wait states. Without `read_m1`
+  (the default, `None`) fetches go through `read_byte` and the other three
+  kinds make no call, exactly as before. The sources for which cycles are M1
+  cycles are in [issue 0001](issues/0001-m1-cycle-signal.md).
+- The callables are plain attributes of the CPU and may be replaced at any
+  time; `read_m1` may also be set back to `None`.
 - Under PyPy, pass a bytearray's own `__getitem__`/`__setitem__` where you
   can: they ran the base workload at 71 M instructions/s against 47 M for
   Python closures over the same bytearray (docs/validation.md, "Speed").
