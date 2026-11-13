@@ -16,8 +16,40 @@ from z80_python import Z80CPU, DebugSession, M1Cycle
 FETCH, HALT, NMI, ACKNOWLEDGE = M1Cycle.FETCH, M1Cycle.HALT, M1Cycle.NMI, M1Cycle.ACKNOWLEDGE
 
 
-class M1Host(MemoryCPU):
-    """``MemoryCPU`` plus a ``read_m1`` that logs the cycle and fetches from ``memory``."""
+class LoggingCPU(MemoryCPU):
+    """``MemoryCPU`` whose bus callbacks also append to ``log``, in order.
+
+    The shared host records no access sequence (see its docstring). These tests
+    need one for a single purpose: to tell which callback an access went
+    through, ``read_m1`` or ``read_byte``. Entries are ``("r", address, value)``,
+    ``("w", address, value)``, ``("in", port, value)`` and ``("out", port, value)``.
+    """
+
+    def __init__(self) -> None:
+        self.log: list[tuple] = []
+        super().__init__()
+
+    def _bus_read(self, address: int) -> int:
+        value = super()._bus_read(address)
+        self.log.append(("r", address, value))
+        return value
+
+    def _bus_write(self, address: int, value: int) -> None:
+        super()._bus_write(address, value)
+        self.log.append(("w", address, value))
+
+    def _port_in(self, port: int) -> int:
+        value = super()._port_in(port)
+        self.log.append(("in", port, value))
+        return value
+
+    def _port_out(self, port: int, value: int) -> None:
+        super()._port_out(port, value)
+        self.log.append(("out", port, value))
+
+
+class M1Host(LoggingCPU):
+    """``LoggingCPU`` plus a ``read_m1`` that logs the cycle and fetches from ``memory``."""
 
     def __init__(self, program: bytes, origin: int = 0) -> None:
         super().__init__()
@@ -158,7 +190,7 @@ def test_a_host_without_the_hook_sees_every_fetch_through_read_byte_as_before() 
     # accesses, order, T-states and state as at 0.4.0, and the hook defaults
     # to None so a later replacement of read_byte is followed.
     program = bytes.fromhex("dd210010 ddcb0506 ed44 fb 76")
-    plain = MemoryCPU()
+    plain = LoggingCPU()
     plain.memory[: len(program)] = program
     plain.sp = 0xF000
     plain.im = 1
@@ -191,7 +223,7 @@ def test_a_hook_that_fetches_from_the_same_memory_changes_nothing_else() -> None
     program = bytes.fromhex("dd210010 ddcb0506 ed44 cb11 fb 76 00")
     machines = []
     for hooked in (False, True):
-        cpu = M1Host(program) if hooked else MemoryCPU()
+        cpu = M1Host(program) if hooked else LoggingCPU()
         if not hooked:
             cpu.memory[: len(program)] = program
             cpu.sp = 0xF000
