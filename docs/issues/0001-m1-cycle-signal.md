@@ -146,5 +146,50 @@ host decide what that costs.
 
 ## Results
 
-To be filled in after the gate runs (before: `main` at `500608c`; after: this
-branch).
+**Claim: no rung result changed.** Before: local `main` at `500608c`
+(release 0.4.0; note that `origin/main` was 14 commits ahead of local `main`
+when this branch was cut, and this branch is based on local `main`). After:
+this branch at the commit that adds this section, whose `src/` and `tests/`
+are those of `9712af1` plus documentation. 2026-11-12, Linux x86_64,
+CPython 3.14.4 and PyPy 7.3.20 / Python 3.11.13 (`PYPY_GC_NURSERY=1M`), the
+commands of [validation](../validation.md#certification-record-commit-b1720b6-2026-09-18-release-040),
+one rung at a time, on a shared machine at load average 30-60, so times are
+upper bounds.
+
+| Rung | Tier | CPython before | CPython after | PyPy before | PyPy after |
+| --- | --- | --- | --- | --- | --- |
+| Ruff check / format | -- | pass / pass | pass / pass | -- | -- |
+| Fast suite (both corpus files deselected) | -- | 4,653 passed, 2 skipped, 7 xfailed | 4,678 passed, 2 skipped, 7 xfailed (the 25 new tests of `tests/test_m1_cycles.py`) | 4,653 / 2 / 7 | 4,678 / 2 / 7 |
+| SingleStepTests, 1,604 files, 1,604,000 cases | emulator-derived | all passed (211 s) | all passed (263 s) | all passed (452 s) | all passed (274 s) |
+| z80test `z80full`, `z80memptr`, `z80ccf` | hardware-captured | 3 passed (355 s) | 3 passed (337 s) | 3 passed (31 s) | 3 passed (27 s) |
+| FUSE 1.6.0 | emulator-derived | 1,351 passed, 6 xfailed | 1,351 passed, 6 xfailed | same | same |
+| Interrupt cross-check vs superzazu/z80 | emulator-derived | 9 passed, 1 xfail | 9 passed, 1 xfail | same | same |
+| `examples/minimal_z80_host.py` | -- | `A=0x2B; T-states=7+4` | same | same | same |
+| ZEXDOC and ZEXALL | hardware-captured | 2 passed (12,499 s) | 2 passed (8,231 s) | 2 passed (776 s) | 2 passed (767 s) |
+
+Every input was present locally (copied or linked from the main checkout's
+fetched oracles; ZEX SHA-256 as in validation.md); no rung was skipped. The
+oracle hosts pass no `read_m1`, so these rungs certify the unhooked path;
+the hooked path rests on `tests/test_m1_cycles.py` and the sources above.
+
+**Speed.** `benchmarks/z80_core_benchmark.py` once each, CPython, pinned to
+one core: before base 1.72 M/s, indexed_cb 0.74 M/s, block_io 0.92 M/s;
+after 1.12, 0.62, 0.86 M/s. Those single runs moved by more than that from
+one invocation to the next. The alternating method of
+`benchmarks/compare_revisions.py` (run on the two trees directly, best of N
+in CPU time, one pinned core):
+
+| Run | base | indexed_cb | block_io |
+| --- | ---: | ---: | ---: |
+| CPython, 30 rounds | x0.921 | x0.946 | x1.007 |
+| CPython, 60 rounds | x0.994 | x1.047 | x1.037 |
+| CPython A/A (`main` against itself), 60 rounds | x0.604 | x0.635 | x1.037 |
+| PyPy, 12 rounds | x0.990 | x0.997 | x0.903 |
+| PyPy, 20 rounds | x0.980 | x1.012 | x0.966 |
+| PyPy, 20 rounds | x0.951 | x1.083 | x1.019 |
+| PyPy A/A, 20 rounds | x1.103 | x1.348 | x1.217 |
+
+At this load the A/A runs move by up to 40%, so the A/B ratios (x0.90 to
+x1.08) show no slowdown above noise, and cannot rule out one of a few
+percent. The unhooked path adds one attribute load and one `is None` test per
+opcode fetch; a measurement on a quiet machine would settle the last digit.
